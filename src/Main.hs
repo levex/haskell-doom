@@ -1,6 +1,5 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
@@ -14,9 +13,11 @@ import           Control.Monad.Reader
 import           Data.IORef
 import           Data.Foldable
 import           Data.Maybe
+import           Data.Vector.V2
 import           Foreign
 import           Game
 import qualified Game.Waddle          as WAD
+import           Graphics.Triangulation.Delaunay
 import           GLUtils
 import           Graphics.GL.Core33
 import           Graphics.UI.GLFW
@@ -30,7 +31,6 @@ import           Data.Array.IO
 import           GHC.TypeLits
 import           Data.Proxy
 import           Enemy
-import Debug.Trace
 
 
 
@@ -151,12 +151,23 @@ constructSectors WAD.Level{..}
               getVertex v
                 = vertexToVect $ levelVertices !! fromIntegral v
 
+-- these are evil
+constructSubSectors :: WAD.Level -> [Subsector]
+constructSubSectors WAD.Level{..}
+    = map (Subsector . subsectorPoints) levelSSectors
+        where subsectorPoints :: WAD.SSector -> [Vertex2D]
+              subsectorPoints WAD.SSector{..}
+                = map (\WAD.Seg{..} ->
+                    vertexToVect $ levelVertices !! fromIntegral segStartVertex)
+                    $ take (fromIntegral ssectorSegCount)
+                        . drop (fromIntegral ssectorSegStart)
+                    $ levelSegs
 
 main :: IO ()
 main = do
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
-    let WAD.Level{..} = head $ toList wadLevels
+    let level@WAD.Level{..} = head $ toList wadLevels
         vertexData    = map vertexToVect levelVertices
         levelEnemies  = [mkEnemy t | t <- levelThings, DEnemy e <- [classifyThingType (WAD.thingType t)]]
         mLineDefs     = filter (not . twoSidedLineDef) levelLineDefs
@@ -166,6 +177,15 @@ main = do
         posY = fromIntegral (WAD.thingY posThing) / scale
         sideDefCount
              = sum $ map (\l -> 1 + fromEnum (twoSidedLineDef l)) mLineDefs
+        sectors
+             = constructSectors level
+
+    let projTrans = perspective (0.75 :: GLfloat)
+                                (fromIntegral width /
+                                    fromIntegral height)
+                                1
+                                400
+
 
     --sectors  <- arrayFrom levelSectors
     --sideDefs <- arrayFrom levelSideDefs
@@ -223,12 +243,14 @@ main = do
     glAttachShader progId vertS
     glAttachShader progId fragS
 
-    FragShaderLocation progId "outColor" $= FragDiffuseColor
-
     glLinkProgram progId
     glUseProgram progId
     glDeleteShader vertS
     glDeleteShader fragS
+
+    FragShaderLocation progId "outColor" $= FragDiffuseColor
+    Uniform progId "proj" $= projTrans
+
 
     spriteVert <- loadShader GL_VERTEX_SHADER "src/shaders/sprite.vert"
     spriteFrag <- loadShader GL_FRAGMENT_SHADER "src/shaders/sprite.frag"
@@ -241,13 +263,51 @@ main = do
 
     bindMagic progId testData
 
-    let projTrans = perspective (0.75 :: GLfloat)
-                                (fromIntegral width /
-                                    fromIntegral height)
-                                1
-                                400
+    -- floor
+    let floorVertexBufferData'
+            = concatMap (triangulate' . sectorFloorPoints) sectors
+        floorVertexBufferData
+            = concatMap (\(V2 x y) -> [x, 0, y]) floorVertexBufferData'
+        triangulate' points
+            = map vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
+                $ triangulate (map v2ToVector2 points)
+        v2ToVector2 (V2 a b) = Vector2 (realToFrac a) (realToFrac b)
+        vector2Tov2 (Vector2 a b) = V2 (realToFrac a) (realToFrac b)
 
-    Uniform progId "proj" $= projTrans
+    --print floorElementBufferData
+
+    let floorData :: BufferData '[ '("position", 3) ] GLfloat
+        floorData = BufferData floorVertexBufferData
+
+    floorVertexBufferId <- withNewPtr (glGenBuffers 1)
+    glBindBuffer GL_ARRAY_BUFFER floorVertexBufferId
+
+    floorVertexArrayId <- withNewPtr (glGenVertexArrays 1)
+    glBindVertexArray floorVertexArrayId
+
+    --floorElementBufferId <- withNewPtr (glGenBuffers 1)
+    --glBindBuffer GL_ELEMENT_ARRAY_BUFFER floorElementBufferId
+    --withArrayLen floorElementBufferData $ \len elems ->
+    --    glBufferData GL_ELEMENT_ARRAY_BUFFER
+    --                 (fromIntegral $ len * sizeOf (0 :: GLuint))
+    --                 (elems :: Ptr GLuint)
+    --                 GL_STATIC_DRAW
+
+    floorVertS <- loadShader GL_VERTEX_SHADER "src/shaders/floor.vert"
+    floorFragS <- loadShader GL_FRAGMENT_SHADER "src/shaders/floor.frag"
+    floorProgId <- glCreateProgram
+    glAttachShader floorProgId vertS
+    glAttachShader floorProgId fragS
+
+    glLinkProgram floorProgId
+    glUseProgram floorProgId
+    glDeleteShader floorVertS
+    glDeleteShader floorFragS
+
+    FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
+    Uniform floorProgId "proj" $= projTrans
+
+    bindMagic floorProgId floorData
 
     glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
@@ -258,16 +318,25 @@ main = do
     testSprite <- makeSprite wad spriteProgId "BOSSF7"
 
     initState <- mdo
-      let rd = RenderData { rdVbo = vertexBufferId,
-                          rdEbo = elementBufferId,
-                          rdTex = texId,
-                          rdProg = progId,
-                          rdVao = vertexArrayId}
+      let levelData = RenderData { rdVbo  = vertexBufferId
+                                 , rdEbo  = elementBufferId
+                                 , rdTex  = texId
+                                 , rdProg = progId
+                                 , rdVao  = vertexArrayId
+                                 }
+
+      let floorData = RenderData { rdVbo  = floorVertexBufferId
+                                 , rdEbo  = 0
+                                 , rdTex  = texId
+                                 , rdProg = floorProgId
+                                 , rdVao  = floorVertexArrayId
+                                 }
 
       initState <- GameState <$> return progId
-                            <*> return wad
+                             <*> return wad
                              <*> return sideDefCount
-                             <*> pure rd
+                             <*> pure levelData
+                             <*> pure floorData
                              <*> pure [testSprite]
                              <*> newIORef (Sector undefined undefined)
                              <*> newIORef 0
@@ -344,6 +413,16 @@ updateView w initV modelM = do
     glUseProgram (rdProg levelRd')
     bindRenderData levelRd'
     glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
+
+    floorRd' <- asks floorRd
+    let floorProgId = rdProg floorRd'
+    glUseProgram floorProgId
+    bindRenderData floorRd'
+    glDrawArrays GL_TRIANGLES 0 5000
+
+    Uniform floorProgId "model" $= modelM
+    Uniform floorProgId "view"  $= viewTrans
+
     --let trans = mkTransformationMat identity (V3 0 4 0) :: M44 GLfloat
     --    modelM' = trans !*! modelM
     --Uniform progId' "model" $= modelM'

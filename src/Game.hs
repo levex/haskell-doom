@@ -23,6 +23,7 @@ data GameState = GameState {
       , wad      :: WAD.Wad
       , sideDefs :: Int
       , levelRd  :: RenderData
+      , floorRd  :: RenderData
       , sprites  :: [Sprite]
       , currentSector :: IORef Sector
       , rot      :: IORef GLfloat
@@ -59,6 +60,11 @@ data Wall = Wall {
     , sector    :: Sector
     , portalTo  :: Maybe Sector
 }
+
+-- For floor and ceiling rendering
+data Subsector = Subsector {
+    subsectorFloorPoints :: [Vertex2D]
+} deriving Show
 
 instance Show Wall where
     show _ = "I'm a wall"
