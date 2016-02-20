@@ -16,13 +16,14 @@ newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)
 
 data GameState = GameState {
-        progId   :: GLuint,
-        wad      :: WAD.Wad,
-        sideDefs :: Int,
-        rot      :: IORef GLfloat,
-        levelRd  :: RenderData,
-        sprites  :: [Sprite],
-        player   :: IORef (V4 GLfloat)
+        progId   :: GLuint
+      , wad      :: WAD.Wad
+      , sideDefs :: Int
+      , levelRd  :: RenderData
+      , sprites  :: [Sprite]
+      , rot      :: IORef GLfloat
+      , player   :: IORef (V4 GLfloat)
+      , enemies  :: IORef [Enemy]
     }
 
 data RenderData = RenderData {
@@ -44,7 +45,7 @@ bindRenderData :: MonadIO m => RenderData -> m ()
 bindRenderData rd = do
   glUseProgram (rdProg rd)
   glBindVertexArray (rdVao rd)
-  glBindBuffer GL_ELEMENT_ARRAY_BUFFER (rdEbo rd) 
+  glBindBuffer GL_ELEMENT_ARRAY_BUFFER (rdEbo rd)
   glBindTexture GL_TEXTURE_2D (rdTex rd)
 
 type Game a = GameMonad GameState a
