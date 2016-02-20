@@ -28,6 +28,7 @@ import           Data.Array.IO
 import           GHC.TypeLits
 import           Data.Proxy
 import           Enemy
+import           Flat
 import Debug.Trace
 
 
