@@ -1,13 +1,11 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecursiveDo #-}
 module Main where
 import           Control.Monad
 import           Control.Monad.Reader
@@ -256,25 +254,22 @@ main = do
     let playerPos = V3 posX 1.6 posY
 
     testSprite <- makeSprite wad spriteProgId "BOSSF7"
-
-    initState <- mdo
-      let rd = RenderData { rdVbo = vertexBufferId,
+    texId <- getTextureId wad
+    let rd = RenderData { rdVbo = vertexBufferId,
                           rdEbo = elementBufferId,
                           rdTex = texId,
                           rdProg = progId,
                           rdVao = vertexArrayId}
 
-      initState <- GameState <$> return progId
-                            <*> return wad
-                             <*> return sideDefCount
-                             <*> pure rd
-                             <*> pure [testSprite]
-                             <*> newIORef (Sector undefined undefined)
-                             <*> newIORef 0
-                             <*> newIORef playerPos
-                             <*> newIORef levelEnemies
-      texId <- runGame gameMain initState
-      return initState
+    initState <- GameState <$> return progId
+                           <*> return wad
+                           <*> return sideDefCount
+                           <*> pure rd
+                           <*> pure [testSprite]
+                           <*> newIORef (Sector undefined undefined)
+                           <*> newIORef 0
+                           <*> newIORef playerPos
+                           <*> newIORef levelEnemies
     mainLoop (\w -> runGame (loop w) initState)
 
 
@@ -286,17 +281,17 @@ extendToV4 (V3 x z y) = V4 x z y 1
 getCurrentPlayerPos :: Pos -> Game Pos
 getCurrentPlayerPos pos = return pos
 
-gameMain :: Game GLuint
-gameMain = do
-    (tW, tH, txt) <- loadTexture "BIGDOOR7"
-    texId <- liftIO $ withNewPtr (glGenTextures 1)
+getTextureId :: WAD.Wad -> IO GLuint
+getTextureId wad = do
+    (tW, tH, txt) <- loadTexture wad "BIGDOOR7"
+    texId <- withNewPtr (glGenTextures 1)
     glBindTexture GL_TEXTURE_2D texId
 
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_NEAREST)
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
-    liftIO $ withArray txt $
+    withArray txt $
       glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) tW tH 0 GL_RGBA GL_FLOAT
     return texId
 
