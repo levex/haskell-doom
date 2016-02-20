@@ -98,7 +98,7 @@ main = mdo
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
     let WAD.Level{..} = head $ toList wadLevels
-        vertexData    = Prelude.map vertexToVect levelVertices
+        vertexData    = map vertexToVect levelVertices
         mLineDefs     = filter (not . twoSidedLineDef) levelLineDefs
         posThing = head $
             filter (\t -> WAD.thingType t == WAD.Player1StartPos) levelThings
@@ -138,7 +138,7 @@ main = mdo
             rightSide ++ leftSide
         elementBufferData
             = concat $ take sideDefCount $
-                iterate (map (+4)) [0,1,2,2,1,3]
+                iterate (map (+4)) ([0,1,2] ++ [2,1,3])
 
     let testData :: BufferData [ '("position", 3), '("texcoord", 2)] GLfloat
         testData = BufferData vertexBufferData
@@ -196,7 +196,7 @@ main = mdo
     let playerPos = V4 posX 1.6 posY 1
 
     testSprite <- makeSprite wad spriteProgId "BOSSF7"
-    
+
     let rd = RenderData { rdVbo = vertexBufferId,
                           rdEbo = elementBufferId,
                           rdTex = texId,
@@ -230,14 +230,7 @@ gameMain = do
 loop :: Window -> Game ()
 loop w = do
     -- TODO: this is not very nice...
-    glClearColor 0 0 0 1
-    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
-    glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
-    progId'  <- asks progId
-    sdefc    <- asks sideDefs
-    sprites' <- asks sprites
-    levelRd' <- asks levelRd
-    rot'     <- get rot
+    rot'    <- get rot
     (V4 px pz py _) <- get player
     let ax     = axisAngle (V3 0 1 0) rot'
         modelM = mkTransformationMat identity (V3 px (-pz) (-py))
@@ -246,15 +239,31 @@ loop w = do
         initV = V3 x1 y1 z1
         move  = V3 (-x1) y1 z1
 
+    updateView w initV modelM
+    keyEvents w move
+
+
+
+updateView :: Window -> V3 GLfloat -> M44 GLfloat -> Game ()
+updateView w initV modelM = do
+    glClearColor 0 0 0 1
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
+    progId' <- asks progId
+
     Uniform progId' "model" $= modelM
 
     let viewTrans = lookAt (V3 0  0  0)
                            initV
                            (V3 0  1  0) :: M44 GLfloat
+
     Uniform progId' "view"  $= viewTrans
 
     --glDrawArrays GL_LINES 0 (fromIntegral ldefc * 4)
     --glPolygonMode GL_FRONT_AND_BACK GL_LINE
+    sdefc   <- asks sideDefs
+    levelRd' <- asks levelRd
+
     glUseProgram (rdProg levelRd')
     bindRenderData levelRd'
     glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
@@ -262,15 +271,18 @@ loop w = do
     --    modelM' = trans !*! modelM
     --Uniform progId' "model" $= modelM'
     --glDrawArrays GL_LINES 0 (fromIntegral ldefc * 2)
-    
+    sprites' <- asks sprites
     -- draw sprite
     -- TODO: can be optimized to only bind program once...
     forM_ sprites' $ \sprite -> do
       bindRenderData (spriteRenderData sprite)
       glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 
-    glUseProgram (rdProg levelRd')
     -- this is a huge mess
+
+
+keyEvents :: Window -> V3 GLfloat -> Game ()
+keyEvents w move = do
     keyW <- io $ getKey w Key'W
     when (keyW == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity move
