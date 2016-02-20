@@ -4,6 +4,9 @@ module TextureLoader
     ( loadTexture
     , loadPalettes
     , ColorPalette
+    , unpackTuples
+    , textureDataToColor
+    , getColor
     )
     where
 
@@ -29,17 +32,19 @@ loadPalettes wad
   where
     pals@(~(Just (WAD.Palettes p))) = WAD.wadPalettes wad
 
-textureDataToColor :: ColorPalette -> [Word8] -> [(GLfloat, GLfloat, GLfloat)]
+textureDataToColor :: ColorPalette -> [Word8] -> [(GLfloat, GLfloat, GLfloat, GLfloat)]
 textureDataToColor palette words
   = (\i -> getColor (fromIntegral i) palette) <$> words
 
-getColor :: Int -> ColorPalette -> (GLfloat, GLfloat, GLfloat)
-getColor n cp = (\(r, g, b) ->
-        (fromIntegral r / 256, fromIntegral g / 256, fromIntegral b / 256))
+getColor :: Int -> ColorPalette -> (GLfloat, GLfloat, GLfloat, GLfloat)
+getColor 0xFF cp 
+  = (0.0, 0.0, 0.0, 0.0)
+getColor n cp
+  = (\(r, g, b) -> (fromIntegral r / 255, fromIntegral g / 255, fromIntegral b / 255, 1.0))
           . (!! n) . head $ cp
 
-unpackTuples :: [(a, a, a)] -> [a]
-unpackTuples = concatMap (\(r, g, b) -> [r, g, b])
+unpackTuples :: [(a, a, a, a)] -> [a]
+unpackTuples = concatMap (\(r, g, b, a) -> [r, g, b, a])
 
 loadTexture :: WAD.LumpName -> Game (GLsizei, GLsizei, [GLfloat])
 loadTexture name = do
@@ -48,7 +53,7 @@ loadTexture name = do
   let texWidth = fromIntegral $ WAD.textureWidth myTex
   let texHeight = fromIntegral $ WAD.textureHeight myTex
   let loadedPalette = loadPalettes wad'
-  pxArr <- liftIO (AI.newArray (0, texWidth*texHeight) (0 :: Word8)
+  pxArr <- liftIO (AI.newArray (0, texWidth*texHeight) (0xFF :: Word8)
             :: IO (IOArray Int Word8))
   forM_ (WAD.texturePatchDescriptors myTex) $ \desc -> do
     let bx = fromIntegral $ WAD.patchDescriptorXOffset desc

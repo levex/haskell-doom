@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecursiveDo #-}
 module Main where
 import           Control.Monad
 import           Control.Monad.Reader
@@ -22,6 +23,7 @@ import           Graphics.UI.GLFW
 import           Linear
 import           Var
 import           Window
+import           Sprite
 import           TextureLoader
 import           Data.Array.IO
 import           GHC.TypeLits
@@ -92,7 +94,7 @@ arrayFrom ls = newListArray (0, length ls) ls
 deriving instance Eq WAD.ThingType
 
 main :: IO ()
-main = do
+main = mdo
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
     let WAD.Level{..} = head $ toList wadLevels
@@ -114,10 +116,10 @@ main = do
                        = levelSectors !! fromIntegral (WAD.sideDefSector s)
                   h1   = fromIntegral sectorFloorHeight / scale
                   h2   = fromIntegral sectorCeilingHeight / scale
-              in [ x1, h2, y1, 0, 0
-                 , x2, h2, y2, 1, 0
-                 , x1, h1, y1, 0, 1
-                 , x2, h1, y2, 1, 1
+              in [ x1, h2, y1,   0, 0
+                 , x2, h2, y2,   1, 0
+                 , x1, h1, y1,   0, 1
+                 , x2, h1, y2,   1, 1
                  ]
 
     let vertexBufferData = do
@@ -168,6 +170,15 @@ main = do
     glDeleteShader vertS
     glDeleteShader fragS
 
+    spriteVert <- loadShader GL_VERTEX_SHADER "src/shaders/sprite.vert"
+    spriteFrag <- loadShader GL_FRAGMENT_SHADER "src/shaders/sprite.frag"
+    spriteProgId <- glCreateProgram
+    glAttachShader spriteProgId spriteVert
+    glAttachShader spriteProgId spriteFrag
+    glLinkProgram spriteProgId
+    glDeleteShader spriteVert
+    glDeleteShader spriteFrag
+
     bindMagic progId testData
 
     let projTrans = perspective (0.75 :: GLfloat)
@@ -184,15 +195,25 @@ main = do
 
     let playerPos = V4 posX 1.6 posY 1
 
+    testSprite <- makeSprite wad spriteProgId "BOSSF7"
+    
+    let rd = RenderData { rdVbo = vertexBufferId,
+                          rdEbo = elementBufferId,
+                          rdTex = texId,
+                          rdProg = progId,
+                          rdVao = vertexArrayId}
+
     initState <- GameState <$> return progId
                            <*> return wad
                            <*> return sideDefCount
                            <*> newIORef 0
+                           <*> pure rd
+                           <*> pure [testSprite]
                            <*> newIORef playerPos
-    runGame gameMain initState
+    texId <- runGame gameMain initState
     mainLoop (\w -> runGame (loop w) initState)
 
-gameMain :: Game ()
+gameMain :: Game GLuint
 gameMain = do
     (tW, tH, txt) <- loadTexture "BIGDOOR7"
     texId <- liftIO $ withNewPtr (glGenTextures 1)
@@ -203,7 +224,8 @@ gameMain = do
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_NEAREST)
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
     liftIO $ withArray txt $
-      glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGB) tW tH 0 GL_RGB GL_FLOAT
+      glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) tW tH 0 GL_RGBA GL_FLOAT
+    return texId
 
 loop :: Window -> Game ()
 loop w = do
@@ -211,9 +233,11 @@ loop w = do
     glClearColor 0 0 0 1
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
-    progId' <- asks progId
-    sdefc   <- asks sideDefs
-    rot'    <- get rot
+    progId'  <- asks progId
+    sdefc    <- asks sideDefs
+    sprites' <- asks sprites
+    levelRd' <- asks levelRd
+    rot'     <- get rot
     (V4 px pz py _) <- get player
     let ax     = axisAngle (V3 0 1 0) rot'
         modelM = mkTransformationMat identity (V3 px (-pz) (-py))
@@ -231,12 +255,21 @@ loop w = do
 
     --glDrawArrays GL_LINES 0 (fromIntegral ldefc * 4)
     --glPolygonMode GL_FRONT_AND_BACK GL_LINE
+    glUseProgram (rdProg levelRd')
+    bindRenderData levelRd'
     glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
     --let trans = mkTransformationMat identity (V3 0 4 0) :: M44 GLfloat
     --    modelM' = trans !*! modelM
     --Uniform progId' "model" $= modelM'
     --glDrawArrays GL_LINES 0 (fromIntegral ldefc * 2)
+    
+    -- draw sprite
+    -- TODO: can be optimized to only bind program once...
+    forM_ sprites' $ \sprite -> do
+      bindRenderData (spriteRenderData sprite)
+      glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 
+    glUseProgram (rdProg levelRd')
     -- this is a huge mess
     keyW <- io $ getKey w Key'W
     when (keyW == KeyState'Pressed) $ do
