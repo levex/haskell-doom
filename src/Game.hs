@@ -6,6 +6,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Foreign.Ptr
 -- ugly
+import           Data.Word
 import qualified Game.Waddle          as WAD
 import           Graphics.GL.Core33
 import           Graphics.UI.GLFW
@@ -26,9 +27,10 @@ data GameState = GameState {
       , floorRd  :: RenderData
       , sprites  :: [Sprite]
       , currentSector :: IORef Sector
-      , rot      :: IORef GLfloat
-      , player   :: IORef Pos
-      , enemies  :: IORef [Enemy]
+      , rot           :: IORef GLfloat
+      , player        :: IORef Pos
+      , enemies       :: IORef [Enemy]
+      , palette       :: ColorPalette
     }
 
 data RenderData = RenderData {
@@ -45,6 +47,8 @@ data Sprite = Sprite {
         spriteAnimFrame  :: IORef Int,  -- current animation frame
         spriteRenderData :: RenderData
     }
+
+type ColorPalette = [[(Word8, Word8, Word8)]]
 
 -- TODO: put these in another file
 type Vertex2D = V2 GLfloat

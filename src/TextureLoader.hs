@@ -23,8 +23,6 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Functions
 import           Game
 
-type ColorPalette = [[(Word8, Word8, Word8)]]
-
 loadPalettes :: WAD.Wad -> ColorPalette
 loadPalettes wad
   | isNothing pals = []

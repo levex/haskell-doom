@@ -340,6 +340,7 @@ main = do
                            <*> newIORef 0
                            <*> newIORef playerPos
                            <*> newIORef levelEnemies
+                           <*> pure (loadPalettes wad)
     mainLoop (\w -> runGame (loop w) initState)
 
 
