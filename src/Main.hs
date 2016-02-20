@@ -354,6 +354,7 @@ main = do
 
     let playerPos = V3 posX 1.6 posY
 
+<<<<<<< 6667a2b75c94e545f2aeed1bda773480ff14c69c
     --texId <- getTextureId wad
     --let levelData = RenderData { rdVbo  = vertexBufferId
     --                           , rdEbo  = elementBufferId
@@ -367,10 +368,20 @@ main = do
                                , rdProg = floorProgId
                                , rdVao  = floorVertexArrayId
                                }
+=======
+    testSprite <- makeSprite wad spriteProgId "BOSSF7"
+    texId <- getTextureId wad
+    let rd = RenderData { rdVbo = vertexBufferId,
+                          rdEbo = elementBufferId,
+                          rdTex = texId,
+                          rdProg = progId,
+                          rdVao = vertexArrayId}
+>>>>>>> Remove loadTexture from Game monad
 
     initState <- GameState <$> return progId
                            <*> return wad
                            <*> return sideDefCount
+<<<<<<< 6667a2b75c94e545f2aeed1bda773480ff14c69c
                            <*> pure levelRData
                            <*> pure floorRData
                            <*> pure []
@@ -380,6 +391,13 @@ main = do
                            <*> newIORef levelEnemies
                            <*> pure (loadPalettes wad)
                            <*> fillSkyTextureData wad
+=======
+                           <*> pure rd
+                           <*> pure [testSprite]
+                           <*> newIORef (Sector undefined undefined)
+                           <*> newIORef 0
+                           <*> newIORef playerPos
+                           <*> newIORef levelEnemies
     mainLoop (\w -> runGame (loop w) initState)
 
 
@@ -391,6 +409,7 @@ extendToV4 (V3 x z y) = V4 x z y 1
 getCurrentPlayerPos :: Pos -> Game Pos
 getCurrentPlayerPos pos = return pos
 
+<<<<<<< 6667a2b75c94e545f2aeed1bda773480ff14c69c
 getTextureId :: WAD.Wad -> WAD.LumpName -> IO GLuint
 getTextureId wad name = do
     (tW, tH, txt) <- loadTexture wad name
