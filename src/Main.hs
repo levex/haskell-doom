@@ -6,7 +6,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RecursiveDo #-}
 module Main where
 import           Control.Monad
 import           Control.Monad.Reader
@@ -317,33 +316,30 @@ main = do
 
     testSprite <- makeSprite wad spriteProgId "BOSSF7"
 
-    initState <- mdo
-      let levelData = RenderData { rdVbo  = vertexBufferId
-                                 , rdEbo  = elementBufferId
-                                 , rdTex  = texId
-                                 , rdProg = progId
-                                 , rdVao  = vertexArrayId
-                                 }
+    texId <- getTextureId wad
+    let levelData = RenderData { rdVbo  = vertexBufferId
+                               , rdEbo  = elementBufferId
+                               , rdTex  = texId
+                               , rdProg = progId
+                               , rdVao  = vertexArrayId
+                               }
+    let floorData = RenderData { rdVbo  = floorVertexBufferId
+                               , rdEbo  = 0
+                               , rdTex  = texId
+                               , rdProg = floorProgId
+                               , rdVao  = floorVertexArrayId
+                               }
 
-      let floorData = RenderData { rdVbo  = floorVertexBufferId
-                                 , rdEbo  = 0
-                                 , rdTex  = texId
-                                 , rdProg = floorProgId
-                                 , rdVao  = floorVertexArrayId
-                                 }
-
-      initState <- GameState <$> return progId
-                             <*> return wad
-                             <*> return sideDefCount
-                             <*> pure levelData
-                             <*> pure floorData
-                             <*> pure [testSprite]
-                             <*> newIORef (Sector undefined undefined)
-                             <*> newIORef 0
-                             <*> newIORef playerPos
-                             <*> newIORef levelEnemies
-      texId <- runGame gameMain initState
-      return initState
+    initState <- GameState <$> return progId
+                           <*> return wad
+                           <*> return sideDefCount
+                           <*> pure floorData
+                           <*> pure levelData
+                           <*> pure [testSprite]
+                           <*> newIORef (Sector undefined undefined)
+                           <*> newIORef 0
+                           <*> newIORef playerPos
+                           <*> newIORef levelEnemies
     mainLoop (\w -> runGame (loop w) initState)
 
 
@@ -355,17 +351,17 @@ extendToV4 (V3 x z y) = V4 x z y 1
 getCurrentPlayerPos :: Pos -> Game Pos
 getCurrentPlayerPos pos = return pos
 
-gameMain :: Game GLuint
-gameMain = do
-    (tW, tH, txt) <- loadTexture "BIGDOOR7"
-    texId <- liftIO $ withNewPtr (glGenTextures 1)
+getTextureId :: WAD.Wad -> IO GLuint
+getTextureId wad = do
+    (tW, tH, txt) <- loadTexture wad "BIGDOOR7"
+    texId <- withNewPtr (glGenTextures 1)
     glBindTexture GL_TEXTURE_2D texId
 
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_NEAREST)
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
-    liftIO $ withArray txt $
+    withArray txt $
       glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) tW tH 0 GL_RGBA GL_FLOAT
     return texId
 

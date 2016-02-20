@@ -37,7 +37,7 @@ textureDataToColor palette words
   = (\i -> getColor (fromIntegral i) palette) <$> words
 
 getColor :: Int -> ColorPalette -> (GLfloat, GLfloat, GLfloat, GLfloat)
-getColor 0xFF cp 
+getColor 0xFF cp
   = (0.0, 0.0, 0.0, 0.0)
 getColor n cp
   = (\(r, g, b) -> (fromIntegral r / 255, fromIntegral g / 255, fromIntegral b / 255, 1.0))
@@ -46,9 +46,8 @@ getColor n cp
 unpackTuples :: [(a, a, a, a)] -> [a]
 unpackTuples = concatMap (\(r, g, b, a) -> [r, g, b, a])
 
-loadTexture :: WAD.LumpName -> Game (GLsizei, GLsizei, [GLfloat])
-loadTexture name = do
-  wad' <- asks wad
+loadTexture :: WAD.Wad -> WAD.LumpName -> IO (GLsizei, GLsizei, [GLfloat])
+loadTexture wad' name = do
   let myTex = fromJust (Map.lookup (mk name) (WAD.wadTextures wad'))
   let texWidth = fromIntegral $ WAD.textureWidth myTex
   let texHeight = fromIntegral $ WAD.textureHeight myTex
