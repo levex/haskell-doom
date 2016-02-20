@@ -27,6 +27,24 @@ import           Data.Array.IO
 import           GHC.TypeLits
 import           Data.Proxy
 
+-- TODO: put these in another file
+type Vertex2D = V2 GLfloat
+
+data Sector = Sector {
+      sectorFloorPoints    :: [Vertex2D]
+    , sectorWalls          :: [Wall]
+} deriving Show
+
+data Wall = Wall {
+      wallStart :: Vertex2D
+    , wallEnd   :: Vertex2D
+    , sector    :: Sector
+    , portalTo  :: Maybe Sector
+}
+
+instance Show Wall where
+    show _ = "I'm a wall"
+
 width :: Int
 height :: Int
 (width, height) = (1280, 1024)
@@ -91,11 +109,68 @@ arrayFrom ls = newListArray (0, length ls) ls
 -- Orphanage
 deriving instance Eq WAD.ThingType
 
+-- TODO: terribly inefficient because of the list lookups
+constructSectors :: WAD.Level -> [Sector]
+constructSectors WAD.Level{..}
+    -- acc -> data -> acc
+    = let (result, _)
+            = foldl (\(sectors, res) linedef ->
+                        (insert sectors res linedef, res)
+                    ) (emptySectors, result) levelLineDefs
+       in result
+        where emptySectors = Sector [] [] <$ levelSectors
+              insert secs result linedef@WAD.LineDef{..}
+                = secs''
+                    where secs' = updateAt secs rightSector (\s -> insertLine s result linedef)
+                          secs'' = case leftSector of
+                                    Just justSect -> updateAt secs' justSect (\s -> insertLine s result linedef)
+                                    Nothing       -> secs'
+                          rightSideDef
+                            = levelSideDefs !! fromIntegral lineDefRightSideDef
+                          leftSideDef
+                            = ((levelSideDefs !!) . fromIntegral) <$> lineDefLeftSideDef
+                          rightSector
+                            = fromIntegral $ WAD.sideDefSector rightSideDef
+                          leftSector
+                            = (fromIntegral . WAD.sideDefSector) <$> leftSideDef
+
+              updateAt :: [Sector] -> Int -> (Sector -> Sector) -> [Sector]
+              updateAt secs at f
+                = let ~(left, a : right) = splitAt at secs
+                   in left ++ [f a] ++ right
+              insertLine :: Sector -> [Sector] -> WAD.LineDef -> Sector
+              insertLine Sector{..} resSecs linedef@WAD.LineDef{..}
+                = Sector {
+                          sectorFloorPoints
+                            = start : sectorFloorPoints
+                        , sectorWalls = Wall {
+                                  wallStart = start
+                                , wallEnd   = end
+                                , sector    = resSecs !! rightSector
+                                , portalTo  = (resSecs !!) <$> leftSector
+                            } : sectorWalls
+                    }
+                        where rightSideDef
+                                = levelSideDefs !! fromIntegral lineDefRightSideDef
+                              leftSideDef
+                                = ((levelSideDefs !!) . fromIntegral) <$> lineDefLeftSideDef
+                              rightSector
+                                = fromIntegral $ WAD.sideDefSector rightSideDef
+                              leftSector
+                                = (fromIntegral . WAD.sideDefSector) <$> leftSideDef
+                              (start, end)
+                                = lineDefVertices linedef
+              lineDefVertices WAD.LineDef{..}
+                = (getVertex lineDefStartVertex, getVertex lineDefEndVertex)
+              getVertex v
+                = vertexToVect $ levelVertices !! fromIntegral v
+
+
 main :: IO ()
 main = do
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
-    let WAD.Level{..} = head $ toList wadLevels
+    let level@WAD.Level{..} = head $ toList wadLevels
         vertexData    = Prelude.map vertexToVect levelVertices
         mLineDefs     = filter (not . twoSidedLineDef) levelLineDefs
         posThing = head $
