@@ -317,7 +317,7 @@ main = do
 
     let playerPos = V3 posX 1.6 posY
 
-    testSprite <- makeSprite wad spriteProgId "BOSSF7"
+    testSprite <- makeSprite wad spriteProgId "HEAD"
     texId <- getTextureId wad
     let levelData = RenderData { rdVbo  = vertexBufferId
                                , rdEbo  = elementBufferId
