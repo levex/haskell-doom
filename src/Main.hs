@@ -335,8 +335,8 @@ main = do
     initState <- GameState <$> return progId
                            <*> return wad
                            <*> return sideDefCount
-                           <*> pure floorData
                            <*> pure levelData
+                           <*> pure floorData
                            <*> pure [testSprite]
                            <*> newIORef (Sector undefined undefined)
                            <*> newIORef 0
