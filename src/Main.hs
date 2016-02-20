@@ -22,6 +22,7 @@ import           Graphics.GL.Core33
 import           Graphics.UI.GLFW
 import           Linear
 import           Var
+import           Types
 import           Window
 import           Sprite
 import           TextureLoader
@@ -94,7 +95,7 @@ arrayFrom ls = newListArray (0, length ls) ls
 deriving instance Eq WAD.ThingType
 
 main :: IO ()
-main = mdo
+main = do
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
     let WAD.Level{..} = head $ toList wadLevels
@@ -193,25 +194,38 @@ main = mdo
     glEnable GL_BLEND
     glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
 
-    let playerPos = V4 posX 1.6 posY 1
+    let playerPos = V3 posX 1.6 posY
 
     testSprite <- makeSprite wad spriteProgId "BOSSF7"
 
-    let rd = RenderData { rdVbo = vertexBufferId,
+    initState <- mdo
+      let rd = RenderData { rdVbo = vertexBufferId,
                           rdEbo = elementBufferId,
                           rdTex = texId,
                           rdProg = progId,
                           rdVao = vertexArrayId}
 
-    initState <- GameState <$> return progId
-                           <*> return wad
-                           <*> return sideDefCount
-                           <*> newIORef 0
-                           <*> pure rd
-                           <*> pure [testSprite]
-                           <*> newIORef playerPos
-    texId <- runGame gameMain initState
+      initState <- GameState <$> return progId
+                            <*> return wad
+                             <*> return sideDefCount
+                             <*> pure rd
+                             <*> pure [testSprite]
+                             <*> newIORef Sector
+                             <*> newIORef 0
+                             <*> newIORef playerPos
+                             <*> newIORef []
+      texId <- runGame gameMain initState
+      return initState
     mainLoop (\w -> runGame (loop w) initState)
+
+
+extendToV4 :: V3 GLfloat -> V4 GLfloat
+extendToV4 (V3 x z y) = V4 x z y 1
+
+-- Needs to take into account the current sector,
+-- hence in the Game monad.
+getCurrentPlayerPos :: Pos -> Game Pos
+getCurrentPlayerPos pos = return pos
 
 gameMain :: Game GLuint
 gameMain = do
@@ -231,7 +245,7 @@ loop :: Window -> Game ()
 loop w = do
     -- TODO: this is not very nice...
     rot'    <- get rot
-    (V4 px pz py _) <- get player
+    (V3 px pz py) <- get player
     let ax     = axisAngle (V3 0 1 0) rot'
         modelM = mkTransformationMat identity (V3 px (-pz) (-py))
         lookM  = mkTransformation ax (V3 0 0 0)
@@ -239,7 +253,9 @@ loop w = do
         initV = V3 x1 y1 z1
         move  = V3 (-x1) y1 z1
 
+    levelRd' <- asks levelRd
     updateView w initV modelM
+    glUseProgram (rdProg levelRd')
     keyEvents w move
 
 
@@ -280,40 +296,45 @@ updateView w initV modelM = do
 
     -- this is a huge mess
 
+multAndProject :: M44 GLfloat -> V3 GLfloat -> V3 GLfloat
+multAndProject m v =
+  let (V4 x y z _) = m !* (extendToV4 v)
+  in V3 x y z
+
 
 keyEvents :: Window -> V3 GLfloat -> Game ()
 keyEvents w move = do
     keyW <- io $ getKey w Key'W
     when (keyW == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity move
-        player $~ (moveM !*)
+        player $~ (multAndProject moveM)
 
     keyS <- io $ getKey w Key'S
     when (keyS == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity (-move)
-        player $~ (moveM !*)
+        player $~ (multAndProject moveM)
 
     keyUp <- io $ getKey w Key'Up
     when (keyUp == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity (V3 0 0.2 0)
-        player $~ (moveM !*)
+        player $~ (multAndProject moveM)
 
     keyDown <- io $ getKey w Key'Down
     when (keyDown == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity (V3 0 (-0.2) 0)
-        player $~ (moveM !*)
+        player $~ (multAndProject moveM)
 
     keyRight <- io $ getKey w Key'Right
     when (keyRight == KeyState'Pressed) $ do
         let (V3 v1 v2 v3) = move
         let moveM = mkTransformationMat identity (V3 v3 v2 (-v1))
-        player $~ (moveM !*)
+        player $~ (multAndProject moveM)
 
     keyLeft <- io $ getKey w Key'Left
     when (keyLeft == KeyState'Pressed) $ do
         let (V3 v1 v2 v3) = move
         let moveM = mkTransformationMat identity (V3 (-v3) v2 v1)
-        player $~ (moveM !*)
+        player $~ (multAndProject moveM)
 
 
     keyD <- io $ getKey w Key'D

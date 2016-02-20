@@ -11,6 +11,9 @@ import           Graphics.GL.Core33
 import           Graphics.UI.GLFW
 import           Linear
 import           Data.IORef
+import           Enemy
+import           Types
+import           Var
 
 newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)
@@ -21,8 +24,9 @@ data GameState = GameState {
       , sideDefs :: Int
       , levelRd  :: RenderData
       , sprites  :: [Sprite]
+      , currentSector :: IORef Sector
       , rot      :: IORef GLfloat
-      , player   :: IORef (V4 GLfloat)
+      , player   :: IORef Pos
       , enemies  :: IORef [Enemy]
     }
 
@@ -50,8 +54,21 @@ bindRenderData rd = do
 
 type Game a = GameMonad GameState a
 
+data Sector = Sector
+
+
 runGame :: GameMonad e a -> e -> IO a
 runGame = runReaderT . unGame
 
 io :: IO a -> GameMonad e a
 io = liftIO
+
+gameLogic :: Game ()
+gameLogic = enemiesLogic
+
+enemiesLogic :: Game ()
+enemiesLogic =
+  enemies $~ map (acquireTarget undefined . moveEnemy)
+
+
+
