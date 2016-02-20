@@ -29,6 +29,7 @@ import           GHC.TypeLits
 import           Data.Proxy
 import           Enemy
 import           Flat
+import           Sky
 import Debug.Trace
 
 
@@ -254,7 +255,7 @@ main = do
 
     let playerPos = V3 posX 1.6 posY
 
-    testSprite <- makeSprite wad spriteProgId "BOSSF7"
+    testSprite <- makeSprite wad spriteProgId "YSKUA0"
     texId <- getTextureId wad
     let rd = RenderData { rdVbo = vertexBufferId,
                           rdEbo = elementBufferId,
@@ -272,6 +273,7 @@ main = do
                            <*> newIORef playerPos
                            <*> newIORef levelEnemies
                            <*> pure (loadPalettes wad)
+                           <*> fillSkyTextureData wad
     mainLoop (\w -> runGame (loop w) initState)
 
 
@@ -332,6 +334,13 @@ updateView w initV modelM = do
                            (V3 0  1  0) :: M44 GLfloat
 
     Uniform progId' "view"  $= viewTrans
+    
+    -- render the sky
+    glDepthMask (fromBool False)
+    sky' <- asks sky
+    bindRenderData sky'
+    glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
+    glDepthMask (fromBool True)
 
     --glDrawArrays GL_LINES 0 (fromIntegral ldefc * 4)
     --glPolygonMode GL_FRONT_AND_BACK GL_LINE
@@ -345,9 +354,9 @@ updateView w initV modelM = do
     --    modelM' = trans !*! modelM
     --Uniform progId' "model" $= modelM'
     --glDrawArrays GL_LINES 0 (fromIntegral ldefc * 2)
-    sprites' <- asks sprites
     -- draw sprite
     -- TODO: can be optimized to only bind program once...
+    sprites' <- asks sprites
     forM_ sprites' $ \sprite -> do
       bindRenderData (spriteRenderData sprite)
       glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr

@@ -1,5 +1,8 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Flat (
-  loadFlat
+  loadFlat,
+  flatWidth,
+  flatHeight
   ) where
 
 import qualified Game.Waddle          as WAD
@@ -14,12 +17,17 @@ import           Graphics.GL.Core33
 import           TextureLoader
 import           Game
 
+(flatWidth, flatHeight) = (64, 64)
+
 loadFlatData :: WAD.Wad -> WAD.LumpName -> [Word8]
+-- special, transparent flat
+loadFlatData wad "F_SKY1"
+  = replicate 4096 0xFF
 loadFlatData wad name
   = BS.unpack $ WAD.flatData flat
   where
     flat = fromMaybe (error "invalid flat") $
-            M.lookup (mk name) (WAD.wadFlats wad)
+             M.lookup (mk name) (WAD.wadFlats wad)
 
 loadFlat :: WAD.LumpName -> Game [GLfloat]
 loadFlat name = do

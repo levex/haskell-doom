@@ -30,6 +30,7 @@ data GameState = GameState {
       , player        :: IORef Pos
       , enemies       :: IORef [Enemy]
       , palette       :: ColorPalette
+      , sky           :: RenderData
     }
 
 data RenderData = RenderData {
