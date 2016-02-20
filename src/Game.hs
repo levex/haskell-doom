@@ -64,11 +64,18 @@ io :: IO a -> GameMonad e a
 io = liftIO
 
 gameLogic :: Game ()
-gameLogic = enemiesLogic
+gameLogic = do
+  updateSector
+  enemiesLogic
+
 
 enemiesLogic :: Game ()
 enemiesLogic =
-  enemies $~ map (acquireTarget undefined . moveEnemy)
+  enemies $~ map (acquireTarget Thing . moveEnemy)
+
+
+updateSector :: Game ()
+updateSector = return ()
 
 
 

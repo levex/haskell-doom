@@ -29,6 +29,8 @@ import           TextureLoader
 import           Data.Array.IO
 import           GHC.TypeLits
 import           Data.Proxy
+import           Enemy
+import Debug.Trace
 
 width :: Int
 height :: Int
@@ -91,14 +93,12 @@ twoSidedLineDef WAD.LineDef{..}
 arrayFrom :: [a] -> IO (IOArray Int a)
 arrayFrom ls = newListArray (0, length ls) ls
 
--- Orphanage
-deriving instance Eq WAD.ThingType
-
 main :: IO ()
 main = do
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
     let WAD.Level{..} = head $ toList wadLevels
+        levelEnemies  = traceShowId ([mkEnemy t | t <- levelThings, DEnemy e <- [classifyThingType (WAD.thingType t)]])
         vertexData    = map vertexToVect levelVertices
         mLineDefs     = filter (not . twoSidedLineDef) levelLineDefs
         posThing = head $
@@ -213,7 +213,7 @@ main = do
                              <*> newIORef Sector
                              <*> newIORef 0
                              <*> newIORef playerPos
-                             <*> newIORef []
+                             <*> newIORef levelEnemies
       texId <- runGame gameMain initState
       return initState
     mainLoop (\w -> runGame (loop w) initState)
@@ -254,6 +254,8 @@ loop w = do
         move  = V3 (-x1) y1 z1
 
     levelRd' <- asks levelRd
+
+    gameLogic
     updateView w initV modelM
     glUseProgram (rdProg levelRd')
     keyEvents w move
