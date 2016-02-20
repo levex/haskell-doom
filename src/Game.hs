@@ -45,6 +45,24 @@ data Sprite = Sprite {
         spriteRenderData :: RenderData
     }
 
+-- TODO: put these in another file
+type Vertex2D = V2 GLfloat
+
+data Sector = Sector {
+      sectorFloorPoints    :: [Vertex2D]
+    , sectorWalls          :: [Wall]
+} deriving Show
+
+data Wall = Wall {
+      wallStart :: Vertex2D
+    , wallEnd   :: Vertex2D
+    , sector    :: Sector
+    , portalTo  :: Maybe Sector
+}
+
+instance Show Wall where
+    show _ = "I'm a wall"
+
 bindRenderData :: MonadIO m => RenderData -> m ()
 bindRenderData rd = do
   glUseProgram (rdProg rd)
@@ -53,8 +71,6 @@ bindRenderData rd = do
   glBindTexture GL_TEXTURE_2D (rdTex rd)
 
 type Game a = GameMonad GameState a
-
-data Sector = Sector
 
 
 runGame :: GameMonad e a -> e -> IO a
