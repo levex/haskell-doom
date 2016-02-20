@@ -41,10 +41,6 @@ loadSprite sprite = do
   let fH = WAD.pictureHeight pic
   pxArr <- AI.newArray (0, fW * fH) (0xFF :: Word8)
             :: IO (IOArray Int Word8)
-  putStrLn $ concat ["WIDTH: ", show fW]
-  putStrLn $ concat ["HEIGHT: ", show fH]
-  putStrLn $ concat ["leftOffset: ", show $ WAD.pictureLeftOffset pic]
-  putStrLn $ concat ["topOffset: ", show $ WAD.pictureTopOffset pic]
   let posts = WAD.picturePosts pic
   forM_ (zip [0..] posts) $ \(x, col) ->
     forM_ col $ \post -> do
