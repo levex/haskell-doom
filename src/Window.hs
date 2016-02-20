@@ -1,8 +1,10 @@
 module Window(initGL) where
-import Graphics.UI.GLFW 
+import Graphics.UI.GLFW
 import Prelude hiding (init)
 import Control.Monad
 import Data.Maybe
+
+type KeyEvent = Key -> IO ()
 
 type MainLoop = (Window -> IO ()) -> IO ()
 
@@ -12,6 +14,7 @@ initGL windowTitle width height = do
     r <- init -- from GLFW
     unless r $ error "Error initializing GLFW!"
 
+    -- Pass in some hints to GLFW to create a core OpenGL profile
     windowHint $ WindowHint'ClientAPI ClientAPI'OpenGL
     windowHint $ WindowHint'OpenGLForwardCompat True
     windowHint $ WindowHint'OpenGLProfile OpenGLProfile'Core
