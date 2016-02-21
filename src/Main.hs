@@ -179,8 +179,6 @@ main = do
             filter (\t -> WAD.thingType t == WAD.Player1StartPos) levelThings
         posX = fromIntegral (WAD.thingX posThing) / scale
         posY = fromIntegral (WAD.thingY posThing) / scale
-        sideDefCount
-             = length levelSideDefs
         sectors
              = constructSectors level
 
@@ -194,7 +192,7 @@ main = do
     --sectors  <- arrayFrom levelSectors
     --sideDefs <- arrayFrom levelSideDefs
 
-    let vertexBufferData = do
+    let vertexBufferData' = do
             sector <- sectors
             Wall{..}   <- sectorWalls sector
             let h1 = sectorFloor sector
@@ -204,17 +202,28 @@ main = do
             case portalTo of
               Just otherSector ->
                   let h1' = sectorFloor otherSector
-                   in [ x1, h1', y1,  0, 0
-                      , x2, h1', y2,  1, 0
-                      , x1, h1,  y1,  0, 1
-                      , x2, h1,  y2,  1, 1
+                      h2' = sectorCeiling otherSector
+                   in [
+                       [ x1, h1', y1,  0, 0
+                       , x2, h1', y2,  1, 0
+                       , x1, h1,  y1,  0, 1
+                       , x2, h1,  y2,  1, 1
+                       ]
+                      ,
+                       [ x1, h2, y1,  0, 0
+                       , x2, h2, y2,  1, 0
+                       , x1, h2',  y1,  0, 1
+                       , x2, h2',  y2,  1, 1
+                       ]
                       ]
-              Nothing ->
+              Nothing -> return
                 [  x1, h2, y1,  0, 0
                  , x2, h2, y2,  1, 0
                  , x1, h1, y1,  0, 1
                  , x2, h1, y2,  1, 1
                  ]
+        vertexBufferData = concat vertexBufferData'
+        sideDefCount     = length vertexBufferData
         elementBufferData
             = concat $ take sideDefCount $
                 iterate (map (+4)) ([0,1,2] ++ [2,1,3])
@@ -265,12 +274,13 @@ main = do
     -- floor
     let floorVertexBufferData
             = concatMap (\Sector{..} ->
-                concatMap (\(V2 x y) ->
-                            [x, sectorFloor, y]
-                ) (triangulate' sectorFloorPoints) ++
-                concatMap (\(V2 x y) ->
-                            [x, sectorCeiling, y]
-                ) (triangulate' sectorFloorPoints)
+                let ts = triangulate' sectorFloorPoints
+                 in concatMap (\(V2 x y) ->
+                                [x, sectorFloor, y]
+                    ) ts ++
+                    concatMap (\(V2 x y) ->
+                                [x, sectorCeiling, y]
+                    ) ts
               ) sectors
         triangulate' points
             = map vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
