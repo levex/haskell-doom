@@ -16,6 +16,9 @@ import           Enemy
 import           Types
 import           Var
 
+scale :: GLfloat
+scale = 16
+
 newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)
 
@@ -31,21 +34,27 @@ data GameState = GameState {
       , enemies       :: IORef [Enemy]
       , palette       :: ColorPalette
       , sky           :: RenderData
+      , uiRd          :: RenderData
+      , pWeapon       :: RenderData
+      , tick          :: IORef Int
+      , lastShot      :: IORef Int
     }
 
 data RenderData = RenderData {
-      rdVbo  :: GLuint
-    , rdEbo  :: GLuint
-    , rdVao  :: GLuint
-    , rdTex  :: GLuint
-    , rdProg :: GLuint
+      rdVbo   :: GLuint
+    , rdEbo   :: GLuint
+    , rdVao   :: GLuint
+    , rdTex   :: GLuint
+    , rdProg  :: GLuint
+    , rdExtra :: GLuint
 }
 
 data Sprite = Sprite {
         spriteName       :: String,     -- sprite name in WAD
         spriteActive     :: IORef Bool, -- whether we can start moving
         spriteAnimFrame  :: IORef Int,  -- current animation frame
-        spriteRenderData :: RenderData
+        spriteRenderData :: RenderData,
+        spritePos        :: Pos
     }
 
 type ColorPalette = [[(Word8, Word8, Word8)]]

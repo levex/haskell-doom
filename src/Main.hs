@@ -15,6 +15,8 @@ import           Data.Maybe
 import           Foreign
 import           Game
 import qualified Game.Waddle          as WAD
+import qualified Data.Map             as M
+import           Data.CaseInsensitive hiding (map)
 import           GLUtils
 import           Graphics.GL.Core33
 import           Graphics.UI.GLFW
@@ -30,6 +32,7 @@ import           Data.Proxy
 import           Enemy
 import           Flat
 import           Sky
+import           UI
 import Debug.Trace
 
 
@@ -37,9 +40,6 @@ import Debug.Trace
 width :: Int
 height :: Int
 (width, height) = (1280, 1024)
-
-scale :: GLfloat
-scale = 16
 
 class BufferStuff a where
     extract :: proxy a -> [(String, Int)]
@@ -167,6 +167,7 @@ main = do
         sideDefCount
              = sum $ map (\l -> 1 + fromEnum (twoSidedLineDef l)) mLineDefs
 
+
     --sectors  <- arrayFrom levelSectors
     --sideDefs <- arrayFrom levelSideDefs
 
@@ -255,7 +256,7 @@ main = do
 
     let playerPos = V3 posX 1.6 posY
 
-    testSprite <- makeSprite wad spriteProgId "YSKUA0"
+    sprites <- createLevelThings wad progId levelThings
     texId <- getTextureId wad
     let rd = RenderData { rdVbo = vertexBufferId,
                           rdEbo = elementBufferId,
@@ -263,19 +264,120 @@ main = do
                           rdProg = progId,
                           rdVao = vertexArrayId}
 
+    let palette' = loadPalettes wad
     initState <- GameState <$> return progId
                            <*> return wad
                            <*> return sideDefCount
                            <*> pure rd
-                           <*> pure [testSprite]
+                           <*> pure sprites
                            <*> newIORef (Sector undefined undefined)
                            <*> newIORef 0
                            <*> newIORef playerPos
                            <*> newIORef levelEnemies
-                           <*> pure (loadPalettes wad)
+                           <*> pure palette'
                            <*> fillSkyTextureData wad
+                           <*> uiTestIO wad palette'
+                           <*> pistolWeapon wad palette'
+                           <*> newIORef 0
+                           <*> newIORef 0
+
     mainLoop (\w -> runGame (loop w) initState)
 
+pistolWeapon :: WAD.Wad -> ColorPalette -> IO RenderData
+pistolWeapon wad palette = do
+    wepVert <- loadShader GL_VERTEX_SHADER "src/shaders/sprite.vert"
+    wepFrag <- loadShader GL_FRAGMENT_SHADER "src/shaders/sprite.frag"
+    wepProgId <- glCreateProgram
+    glAttachShader wepProgId wepVert
+    glAttachShader wepProgId wepFrag
+    glLinkProgram wepProgId
+    glUseProgram wepProgId
+
+    vaoId <- withNewPtr (glGenVertexArrays 1)
+    glBindVertexArray vaoId
+
+    vboId <- withNewPtr (glGenBuffers 1)
+    glBindBuffer GL_ARRAY_BUFFER vboId
+    withArrayLen vbo $ \len vertices ->
+      glBufferData GL_ARRAY_BUFFER
+                    (fromIntegral $ len * sizeOf (0 :: GLfloat))
+                    (vertices :: Ptr GLfloat)
+                    GL_STATIC_DRAW
+
+    eboId <- withNewPtr (glGenBuffers 1)
+    glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
+    withArrayLen ebo $ \len vertices ->
+      glBufferData GL_ELEMENT_ARRAY_BUFFER
+                    (fromIntegral $ len * sizeOf (0 :: GLuint))
+                    (vertices :: Ptr GLuint)
+                    GL_STATIC_DRAW
+
+--still
+    let wepSprite = fromMaybe (error "wep not found")
+          (M.lookup (mk "PISGA0") (WAD.wadSprites wad))
+    let (tW, tH) = (fromIntegral $ WAD.pictureWidth $ WAD.spritePicture wepSprite,
+                    fromIntegral $ WAD.pictureHeight $ WAD.spritePicture wepSprite)
+    txt <- loadSpriteColor wepSprite palette
+    stillTexId <- withNewPtr (glGenTextures 1)
+    glBindTexture GL_TEXTURE_2D stillTexId
+
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_NEAREST)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
+
+    withArray txt $
+      glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) tW tH 0 GL_RGBA GL_FLOAT
+
+--firing
+    let fwepSprite = fromMaybe (error "fwep not found")
+          (M.lookup (mk "PISFA0") (WAD.wadSprites wad))
+    let (fW, fH) = (fromIntegral $ WAD.pictureWidth $ WAD.spritePicture fwepSprite,
+                    fromIntegral $ WAD.pictureHeight $ WAD.spritePicture fwepSprite)
+    ftxt <- loadSpriteColor fwepSprite palette
+    firingTexId <- withNewPtr (glGenTextures 1)
+    glBindTexture GL_TEXTURE_2D firingTexId
+
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_NEAREST)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
+
+    withArray ftxt $
+      glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) fW fH 0 GL_RGBA GL_FLOAT
+  
+    posAttrib <- get $ AttribLocation wepProgId "position"
+    glEnableVertexAttribArray posAttrib
+    glVertexAttribPointer posAttrib
+                          3
+                          GL_FLOAT
+                          (fromBool False)
+                          (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
+                          nullPtr
+
+    colAttrib <- get $ AttribLocation wepProgId "texcoord"
+    glEnableVertexAttribArray colAttrib
+    glVertexAttribPointer colAttrib
+                          2
+                          GL_FLOAT
+                          (fromBool False)
+                          (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
+                          (offsetPtr 3 (0 :: GLfloat))
+
+    return $ RenderData { rdVbo = vboId,
+                          rdEbo = eboId,
+                          rdTex = stillTexId,
+                          rdExtra = firingTexId,
+                          rdVao = vaoId,
+                          rdProg = wepProgId}
+    where
+      vbo = [-0.2, -0.1, 0.0,  0.0, 0.0,
+              0.2, -0.1, 0.0,  1.0, 0.0,
+             -0.2, -0.7, 0.0,  0.0, 1.0,
+              0.2, -0.7, 0.0,  1.0, 1.0]
+
+      ebo = [0, 1, 2,
+             2, 1, 3]
 
 extendToV4 :: V3 GLfloat -> V4 GLfloat
 extendToV4 (V3 x z y) = V4 x z y 1
@@ -302,6 +404,8 @@ getTextureId wad = do
 loop :: Window -> Game ()
 loop w = do
     -- TODO: this is not very nice...
+    tick' <- asks tick
+    io $ modifyIORef' tick' (+ 1)
     rot'    <- get rot
     (V3 px pz py) <- get player
     let ax     = axisAngle (V3 0 1 0) rot'
@@ -361,6 +465,24 @@ updateView w initV modelM = do
       bindRenderData (spriteRenderData sprite)
       glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 
+    -- draw ui BEWARE IT'S DORK
+    -- uiRd' <- asks uiRd
+    -- bindRenderData uiRd'
+    -- glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
+    
+    -- draw weapon
+    glDepthMask (fromBool False)
+    wepRd <- asks pWeapon
+    bindRenderData wepRd
+    lastShot' <- asks lastShot
+    lastShot'' <- io $ readIORef lastShot'
+    tick' <- asks tick
+    tick'' <- io $ readIORef tick'
+    when (tick'' - lastShot'' <= 25 && lastShot'' /= 0) $
+      glBindTexture GL_TEXTURE_2D (rdExtra wepRd)
+    glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
+    glDepthMask (fromBool True)
+
     -- this is a huge mess
 
 multAndProject :: M44 GLfloat -> V3 GLfloat -> V3 GLfloat
@@ -368,9 +490,31 @@ multAndProject m v =
   let (V4 x y z _) = m !* (extendToV4 v)
   in V3 x y z
 
+applyShot :: Game ()
+applyShot = do
+  io $ putStrLn "Shots fired"
+  rot' <- asks rot
+  sprites' <- asks sprites
+  playerPos' <- asks player
+  playerPos <- io $ readIORef playerPos'
+  forM_ sprites' $ \sprite -> do
+    let spritePos' = spritePos sprite
+    io $ putStrLn . concat $ ["playerPos: ", show playerPos, " spritePos': ",
+                                show spritePos']
+    when (inFieldOfView 180 (viewDirection Forwards) playerPos spritePos') $ do
+      io $ putStrLn "LOL"
+  return ()
 
 keyEvents :: Window -> V3 GLfloat -> Game ()
 keyEvents w move = do
+    keyP <- io $ getKey w Key'Space
+    when (keyP == KeyState'Pressed) $ do
+        tick' <- asks tick
+        tick'' <- io $ readIORef tick'
+        lastShot' <- asks lastShot
+        applyShot
+        io $ writeIORef lastShot' tick''
+
     keyW <- io $ getKey w Key'W
     when (keyW == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity move

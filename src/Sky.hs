@@ -7,6 +7,7 @@ import           GLUtils
 import           Game
 import           Var
 import           Window
+import           Sprite
 import           TextureLoader
 
 fillSkyTextureData :: WAD.Wad -> IO RenderData

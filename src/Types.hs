@@ -6,7 +6,6 @@ import           Graphics.GL.Core33
 import qualified Game.Waddle.Types as WAD
 import Game.Waddle.Types (ThingType(..))
 
-
 type Pos = V3 GLfloat
 
 data DType = StartPos Int | DEnemy ThingType | PickUp ThingType | Object ThingType | Unknown
