@@ -21,7 +21,8 @@ import           Game
 
 loadFlatData :: WAD.Wad -> WAD.LumpName -> [Word8]
 -- special, transparent flat
-loadFlatData :: WAD.Wad -> WAD.LumpName -> [Word8]
+loadFlatData wad "F_SKY1"
+  = replicate 4096 0xFF
 loadFlatData wad name
   = BS.unpack $ WAD.flatData flat
   where

@@ -37,15 +37,13 @@ import           Enemy
 import           Sky
 import           Triangulation
 import           Flat
+import           Sky
 import Debug.Trace
 
 
 width :: Int
 height :: Int
 (width, height) = (1280, 1024)
-
-scale :: GLfloat
-scale = 16
 
 class BufferStuff a where
     extract :: proxy a -> [(String, Int)]
@@ -355,7 +353,6 @@ main = do
 
     let playerPos = V3 posX 1.6 posY
 
-<<<<<<< 6667a2b75c94e545f2aeed1bda773480ff14c69c
     --texId <- getTextureId wad
     --let levelData = RenderData { rdVbo  = vertexBufferId
     --                           , rdEbo  = elementBufferId
@@ -369,49 +366,21 @@ main = do
                                , rdProg = floorProgId
                                , rdVao  = floorVertexArrayId
                                }
-=======
-    testSprite <- makeSprite wad spriteProgId "BOSSF7"
-    texId <- getTextureId wad
-    let rd = RenderData { rdVbo = vertexBufferId,
-                          rdEbo = elementBufferId,
-                          rdTex = texId,
-                          rdProg = progId,
-                          rdVao = vertexArrayId}
->>>>>>> Remove loadTexture from Game monad
-
+    sprites <- createLevelThings wad progId (WAD.levelThings level)
     initState <- GameState <$> return progId
                            <*> return wad
                            <*> return sideDefCount
-<<<<<<< 6667a2b75c94e545f2aeed1bda773480ff14c69c
                            <*> pure levelRData
                            <*> pure floorRData
-                           <*> pure []
+                           <*> pure sprites
                            <*> newIORef undefined -- TODO: current sector
                            <*> newIORef 0
                            <*> newIORef playerPos
                            <*> newIORef levelEnemies
                            <*> pure (loadPalettes wad)
                            <*> fillSkyTextureData wad
-=======
-                           <*> pure rd
-                           <*> pure [testSprite]
-                           <*> newIORef (Sector undefined undefined)
-                           <*> newIORef 0
-                           <*> newIORef playerPos
-                           <*> newIORef levelEnemies
-                           <*> pure (loadPalettes wad)
     mainLoop (\w -> runGame (loop w) initState)
 
-
-extendToV4 :: V3 GLfloat -> V4 GLfloat
-extendToV4 (V3 x z y) = V4 x z y 1
-
--- Needs to take into account the current sector,
--- hence in the Game monad.
-getCurrentPlayerPos :: Pos -> Game Pos
-getCurrentPlayerPos pos = return pos
-
-<<<<<<< 6667a2b75c94e545f2aeed1bda773480ff14c69c
 getTextureId :: WAD.Wad -> WAD.LumpName -> IO GLuint
 getTextureId wad name = do
     (tW, tH, txt) <- loadTexture wad name
@@ -466,6 +435,13 @@ updateView w initV modelM = do
                            (V3 0  1  0) :: M44 GLfloat
 
     Uniform progId' "view"  $= viewTrans
+    
+    -- render the sky
+    glDepthMask (fromBool False)
+    sky' <- asks sky
+    bindRenderData sky'
+    glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
+    glDepthMask (fromBool True)
 
     -- render the sky
     glDepthMask (fromBool False)
@@ -511,6 +487,10 @@ updateView w initV modelM = do
       glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 
     -- this is a huge mess
+    --
+
+extendToV4 :: V3 GLfloat -> V4 GLfloat
+extendToV4 (V3 x z y) = V4 x z y 1
 
 multAndProject :: M44 GLfloat -> V3 GLfloat -> V3 GLfloat
 multAndProject m v =

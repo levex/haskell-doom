@@ -42,11 +42,16 @@ data RenderData = RenderData {
     , rdProg :: GLuint
 }
 
+
+scale :: GLfloat
+scale = 16
+
 data Sprite = Sprite {
         spriteName       :: String,     -- sprite name in WAD
         spriteActive     :: IORef Bool, -- whether we can start moving
         spriteAnimFrame  :: IORef Int,  -- current animation frame
-        spriteRenderData :: RenderData
+        spriteRenderData :: RenderData,
+        spritePos        :: Pos
     }
 
 type ColorPalette = [[(Word8, Word8, Word8)]]

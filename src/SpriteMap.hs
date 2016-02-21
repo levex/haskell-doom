@@ -1,7 +1,30 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SpriteMap where
+import Enemy
+
+import qualified Game.Waddle          as WAD
+import Data.Maybe
+
+thingToSprite :: WAD.ThingType -> WAD.LumpName
+thingToSprite t
+  = fromMaybe (error "NO THING")
+        (lookup (thingTypeToInt t) thingIdToSprite)
+
+reservedSpriteIds = [-1, 0, 1, 2, 3, 4, 11, 14]
+
+thingTypeToInt :: Integral a => WAD.ThingType -> a
+thingTypeToInt t
+  = thingTypeToInt' t [0..3006]
+  where
+    thingTypeToInt' t []
+      = error "lol no"
+    thingTypeToInt' t (x : xs)
+      | t == WAD.thingTypeFromNumber x = x
+      | otherwise                      = thingTypeToInt' t xs
 
 thingIdToSprite = [
-  (-1,"ffff"),
+  ((-1),"ffff"),
   (0,"0000"),
   (1,"PLAY"),
   (2,"PLAY"),
