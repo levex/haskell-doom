@@ -36,6 +36,7 @@ import           Data.Proxy
 import           Enemy
 import           Sky
 import           Triangulation
+import           Flat
 import Debug.Trace
 
 
