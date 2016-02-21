@@ -197,31 +197,21 @@ main = do
             Wall{..}   <- sectorWalls sector
             let h1 = sectorFloor sector
                 h2 = sectorCeiling sector
-                V2 x1 y1 = wallStart
-                V2 x2 y2 = wallEnd
             case portalTo of
               Just otherSector ->
                   let h1' = sectorFloor otherSector
                       h2' = sectorCeiling otherSector
-                   in [
-                       [ x1, h1', y1,  0, 0
-                       , x2, h1', y2,  1, 0
-                       , x1, h1,  y1,  0, 1
-                       , x2, h1,  y2,  1, 1
-                       ]
-                      ,
-                       [ x1, h2, y1,  0, 0
-                       , x2, h2, y2,  1, 0
-                       , x1, h2',  y1,  0, 1
-                       , x2, h2',  y2,  1, 1
-                       ]
+                   in [ quad wallStart wallEnd h1' h1
+                      , quad wallStart wallEnd h2 h2'
                       ]
-              Nothing -> return
-                [  x1, h2, y1,  0, 0
-                 , x2, h2, y2,  1, 0
-                 , x1, h1, y1,  0, 1
-                 , x2, h1, y2,  1, 1
-                 ]
+              Nothing ->
+                  return $ quad wallStart wallEnd h2 h1
+        quad (V2 x y) (V2 x' y') h' h
+            = [ x,  h', y,  0, 0
+              , x', h', y', 1, 0
+              , x,  h,  y,  0, 1
+              , x', h,  y', 1, 1
+              ]
         vertexBufferData = concat vertexBufferData'
         sideDefCount     = length vertexBufferData
         elementBufferData
@@ -298,14 +288,6 @@ main = do
 
     floorVertexArrayId <- withNewPtr (glGenVertexArrays 1)
     glBindVertexArray floorVertexArrayId
-
-    --floorElementBufferId <- withNewPtr (glGenBuffers 1)
-    --glBindBuffer GL_ELEMENT_ARRAY_BUFFER floorElementBufferId
-    --withArrayLen floorElementBufferData $ \len elems ->
-    --    glBufferData GL_ELEMENT_ARRAY_BUFFER
-    --                 (fromIntegral $ len * sizeOf (0 :: GLuint))
-    --                 (elems :: Ptr GLuint)
-    --                 GL_STATIC_DRAW
 
     floorVertS <- loadShader GL_VERTEX_SHADER "src/shaders/floor.vert"
     floorFragS <- loadShader GL_FRAGMENT_SHADER "src/shaders/floor.frag"
