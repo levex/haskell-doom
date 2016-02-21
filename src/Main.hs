@@ -174,7 +174,6 @@ main = do
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
     let level@WAD.Level{..} = head $ toList wadLevels
-        vertexData    = map vertexToVect levelVertices
         levelEnemies  = [mkEnemy t | t <- levelThings, DEnemy e <- [classifyThingType (WAD.thingType t)]]
         posThing = head $
             filter (\t -> WAD.thingType t == WAD.Player1StartPos) levelThings
@@ -194,18 +193,6 @@ main = do
 
     --sectors  <- arrayFrom levelSectors
     --sideDefs <- arrayFrom levelSideDefs
-
-    let fromSide side (x1, y1) (x2, y2)
-            = let s = levelSideDefs !! fromIntegral side
-                  WAD.Sector{..}
-                       = levelSectors !! fromIntegral (WAD.sideDefSector s)
-                  h1   = fromIntegral sectorFloorHeight / scale
-                  h2   = fromIntegral sectorCeilingHeight / scale
-              in [ x1, h2, y1,   0, 0
-                 , x2, h2, y2,   1, 0
-                 , x1, h1, y1,   0, 1
-                 , x2, h1, y2,   1, 1
-                 ]
 
     let vertexBufferData = do
             Sector{..} <- sectors
