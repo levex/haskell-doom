@@ -14,7 +14,7 @@ import           Control.Monad.Reader
 import           Data.IORef
 import           Data.Foldable
 import           Data.Maybe
-import           Data.List
+import           Data.List hiding (map)
 import           Data.Vector.V2
 import qualified Data.Map as M
 import           Foreign
@@ -24,6 +24,7 @@ import Graphics.Triangulation.Delaunay
 import           GLUtils
 import           Graphics.GL.Core33
 import           Graphics.UI.GLFW
+import           Data.CaseInsensitive
 import           Linear
 import           Var
 import           Types
@@ -82,9 +83,9 @@ bindMagic progId (BufferData bdata) = liftIO $ do
                                   (fromIntegral $ totalSize * dataSize)
                                   offset
             return (offset `plusPtr` fromIntegral (size * fromIntegral dataSize))
-        ) nullPtr (map (fmap fromIntegral) extracted)
+        ) nullPtr ((<$>) (fmap fromIntegral) extracted)
     where extracted = extract (Proxy :: Proxy (BufferData desc a))
-          totalSize = fromIntegral $ sum . map snd $ extracted
+          totalSize = fromIntegral $ sum . (<$>) snd $ extracted
           dataSize  = sizeOf proxy
           proxy   = undefined :: a
 
@@ -108,7 +109,7 @@ constructSectors WAD.Level{..}
                         (insert sectors res linedef, res)
                     ) (emptySectors, result) levelLineDefs
        in result
-        where emptySectors = map (\WAD.Sector{..} -> Sector {
+        where emptySectors =  (<$>) (\WAD.Sector{..} -> Sector {
                                           sectorWalls       = []
                                         , sectorCeiling     = fromIntegral sectorCeilingHeight / scale
                                         , sectorFloor       = fromIntegral sectorFloorHeight / scale
@@ -164,10 +165,10 @@ constructSectors WAD.Level{..}
 -- these are evil
 constructSubSectors :: WAD.Level -> [Subsector]
 constructSubSectors WAD.Level{..}
-    = map (Subsector . subsectorPoints) levelSSectors
+    = (<$>) (Subsector . subsectorPoints) levelSSectors
         where subsectorPoints :: WAD.SSector -> [Vertex2D]
               subsectorPoints WAD.SSector{..}
-                = map (\WAD.Seg{..} ->
+                = (<$>) (\WAD.Seg{..} ->
                     vertexToVect $ levelVertices !! fromIntegral segStartVertex)
                     $ take (fromIntegral ssectorSegCount)
                         . drop (fromIntegral ssectorSegStart)
@@ -217,7 +218,7 @@ main = do
               ]
         textToVert'
             = M.fromList
-                $ map (\xs@((tex, _) : _) -> (tex, concatMap snd xs))
+                $ (<$>) (\xs@((tex, _) : _) -> (tex, concatMap snd xs))
                 $ groupBy (\(t1, _) (t2, _) -> t1 == t2)
                 $ sortOn fst vertexBufferData'
         textToVert
@@ -227,7 +228,7 @@ main = do
         sideDefCount = length dat
         elementBufferData
             = concat $ take sideDefCount $
-                iterate (map (+4)) ([0,1,2] ++ [2,1,3])
+                iterate ((<$>) (+4)) ([0,1,2] ++ [2,1,3])
 
     elementBufferId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ELEMENT_ARRAY_BUFFER elementBufferId
@@ -293,7 +294,7 @@ main = do
                 --    -- !ys = traceShowId $ triangulation ts
                 --    -- !asd = error $ show $ map wallPoints (chainWalls sectorWalls)
                 --    ts = triangulation $ nub . concat $ map wallPoints (chainWalls sectorWalls)
-                let ts = triangulate' $ nub . concat $ map wallPoints sectorWalls
+                let ts = triangulate' $ nub . concat $ (<$>) wallPoints sectorWalls
                  in concatMap (\(V2 x y) ->
                                 [x, sectorFloor, y]
                     ) ts ++
@@ -302,8 +303,8 @@ main = do
                     ) ts
               ) sectors
         triangulate' points
-            = map vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
-                $ triangulate (map v2ToVector2 points)
+            = (<$>) vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
+                $ triangulate ((<$>) v2ToVector2 points)
         v2ToVector2 (V2 a b) = Vector2 (realToFrac a) (realToFrac b)
         wallPoints Wall{..} = [wallStart, wallEnd]
         findItem f [] = error "findItem: item not found"
@@ -367,6 +368,7 @@ main = do
                                , rdVao  = floorVertexArrayId
                                }
     sprites <- createLevelThings wad progId (WAD.levelThings level)
+    let palette' = loadPalettes wad
     initState <- GameState <$> return progId
                            <*> return wad
                            <*> return sideDefCount
@@ -379,7 +381,106 @@ main = do
                            <*> newIORef levelEnemies
                            <*> pure (loadPalettes wad)
                            <*> fillSkyTextureData wad
+                           <*> pistolWeapon wad palette'
+                           <*> newIORef 0
+                           <*> newIORef 0
     mainLoop (\w -> runGame (loop w) initState)
+
+pistolWeapon :: WAD.Wad -> ColorPalette -> IO RenderData
+pistolWeapon wad palette = do
+    wepVert <- loadShader GL_VERTEX_SHADER "src/shaders/sprite.vert"
+    wepFrag <- loadShader GL_FRAGMENT_SHADER "src/shaders/sprite.frag"
+    wepProgId <- glCreateProgram
+    glAttachShader wepProgId wepVert
+    glAttachShader wepProgId wepFrag
+    glLinkProgram wepProgId
+    glUseProgram wepProgId
+
+    vaoId <- withNewPtr (glGenVertexArrays 1)
+    glBindVertexArray vaoId
+
+    vboId <- withNewPtr (glGenBuffers 1)
+    glBindBuffer GL_ARRAY_BUFFER vboId
+    withArrayLen vbo $ \len vertices ->
+      glBufferData GL_ARRAY_BUFFER
+                    (fromIntegral $ len * sizeOf (0 :: GLfloat))
+                    (vertices :: Ptr GLfloat)
+                    GL_STATIC_DRAW
+
+    eboId <- withNewPtr (glGenBuffers 1)
+    glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
+    withArrayLen ebo $ \len vertices ->
+      glBufferData GL_ELEMENT_ARRAY_BUFFER
+                    (fromIntegral $ len * sizeOf (0 :: GLuint))
+                    (vertices :: Ptr GLuint)
+                    GL_STATIC_DRAW
+
+--still
+    let wepSprite = fromMaybe (error "wep not found")
+          (M.lookup (mk "PISGA0") (WAD.wadSprites wad))
+    let (tW, tH) = (fromIntegral $ WAD.pictureWidth $ WAD.spritePicture wepSprite,
+                    fromIntegral $ WAD.pictureHeight $ WAD.spritePicture wepSprite)
+    txt <- loadSpriteColor wepSprite palette
+    stillTexId <- withNewPtr (glGenTextures 1)
+    glBindTexture GL_TEXTURE_2D stillTexId
+
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_NEAREST)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
+
+    withArray txt $
+      glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) tW tH 0 GL_RGBA GL_FLOAT
+
+--firing
+    let fwepSprite = fromMaybe (error "fwep not found")
+          (M.lookup (mk "PISFA0") (WAD.wadSprites wad))
+    let (fW, fH) = (fromIntegral $ WAD.pictureWidth $ WAD.spritePicture fwepSprite,
+                    fromIntegral $ WAD.pictureHeight $ WAD.spritePicture fwepSprite)
+    ftxt <- loadSpriteColor fwepSprite palette
+    firingTexId <- withNewPtr (glGenTextures 1)
+    glBindTexture GL_TEXTURE_2D firingTexId
+
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_NEAREST)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
+
+    withArray ftxt $
+      glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) fW fH 0 GL_RGBA GL_FLOAT
+  
+    posAttrib <- get $ AttribLocation wepProgId "position"
+    glEnableVertexAttribArray posAttrib
+    glVertexAttribPointer posAttrib
+                          3
+                          GL_FLOAT
+                          (fromBool False)
+                          (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
+                          nullPtr
+
+    colAttrib <- get $ AttribLocation wepProgId "texcoord"
+    glEnableVertexAttribArray colAttrib
+    glVertexAttribPointer colAttrib
+                          2
+                          GL_FLOAT
+                          (fromBool False)
+                          (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
+                          (offsetPtr 3 (0 :: GLfloat))
+
+    return $ RenderData { rdVbo = vboId,
+                          rdEbo = eboId,
+                          rdTex = stillTexId,
+                          rdExtra = firingTexId,
+                          rdVao = vaoId,
+                          rdProg = wepProgId}
+    where
+      vbo = [-0.2, -0.1, 0.0,  0.0, 0.0,
+              0.2, -0.1, 0.0,  1.0, 0.0,
+             -0.2, -0.7, 0.0,  0.0, 1.0,
+              0.2, -0.7, 0.0,  1.0, 1.0]
+
+      ebo = [0, 1, 2,
+             2, 1, 3]
 
 getTextureId :: WAD.Wad -> WAD.LumpName -> IO GLuint
 getTextureId wad name = do
@@ -398,6 +499,8 @@ getTextureId wad name = do
 loop :: Window -> Game ()
 loop w = do
     -- TODO: this is not very nice...
+    ticks' <- asks ticks
+    io $ modifyIORef' ticks' (+ 1)
     rot'    <- get rot
     (V3 px pz py) <- get player
     let ax     = axisAngle (V3 0 1 0) rot'
@@ -486,6 +589,17 @@ updateView w initV modelM = do
       bindRenderData (spriteRenderData sprite)
       glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 
+    -- render wep
+    weapon <- asks pWeapon
+    bindRenderData weapon
+    ticks' <- asks ticks
+    lastShot' <- asks lastShot
+    ticks'' <- io $ readIORef ticks'
+    lastShot'' <- io $ readIORef lastShot'
+    when (ticks'' - lastShot'' <= 25) $
+      glBindTexture GL_TEXTURE_2D (rdExtra weapon)
+    glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
+
     -- this is a huge mess
     --
 
@@ -497,9 +611,20 @@ multAndProject m v =
   let (V4 x y z _) = m !* (extendToV4 v)
   in V3 x y z
 
+applyShot :: Game ()
+applyShot = return ()
 
 keyEvents :: Window -> V3 GLfloat -> Game ()
 keyEvents w move = do
+    keyP <- io $ getKey w Key'Space
+    when (keyP == KeyState'Pressed) $ do
+      ticks' <- asks ticks
+      ticks'' <- io $ readIORef ticks'
+      lastShot' <- asks lastShot
+      io $ writeIORef lastShot' ticks''
+      applyShot
+      
+
     keyW <- io $ getKey w Key'W
     when (keyW == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity move

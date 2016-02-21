@@ -32,6 +32,9 @@ data GameState = GameState {
       , enemies       :: IORef [Enemy]
       , palette       :: ColorPalette
       , sky           :: RenderData
+      , pWeapon       :: RenderData
+      , ticks         :: IORef Int
+      , lastShot      :: IORef Int
     }
 
 data RenderData = RenderData {
@@ -40,6 +43,7 @@ data RenderData = RenderData {
     , rdVao  :: GLuint
     , rdTex  :: GLuint
     , rdProg :: GLuint
+    , rdExtra :: GLuint
 }
 
 
