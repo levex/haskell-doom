@@ -62,10 +62,10 @@ data Sector = Sector {
 } deriving Show
 
 data Wall = Wall {
-      wallStart :: Vertex2D
-    , wallEnd   :: Vertex2D
-    , sector    :: Sector
-    , portalTo  :: Maybe Sector
+      wallStart  :: Vertex2D
+    , wallEnd    :: Vertex2D
+    , wallSector :: Sector
+    , portalTo   :: Maybe Sector
 }
 
 -- For floor and ceiling rendering

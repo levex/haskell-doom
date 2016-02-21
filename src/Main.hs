@@ -136,10 +136,10 @@ constructSectors WAD.Level{..}
                           sectorFloorPoints
                             = start : sectorFloorPoints
                         , sectorWalls = Wall {
-                                  wallStart = start
-                                , wallEnd   = end
-                                , sector    = resSecs !! rightSector
-                                , portalTo  = (resSecs !!) <$> leftSector
+                                  wallStart  = start
+                                , wallEnd    = end
+                                , wallSector = resSecs !! rightSector
+                                , portalTo   = (resSecs !!) <$> leftSector
                             } : sectorWalls
                     }
                         where rightSideDef
@@ -195,17 +195,26 @@ main = do
     --sideDefs <- arrayFrom levelSideDefs
 
     let vertexBufferData = do
-            Sector{..} <- sectors
-            Wall{..}   <- sectorWalls
-            let h1 = sectorFloor
-                h2 = sectorCeiling
+            sector <- sectors
+            Wall{..}   <- sectorWalls sector
+            let h1 = sectorFloor sector
+                h2 = sectorCeiling sector
                 V2 x1 y1 = wallStart
                 V2 x2 y2 = wallEnd
-            [  x1, h2, y1,  0, 0
-             , x2, h2, y2,  1, 0
-             , x1, h1, y1,  0, 1
-             , x2, h1, y2,  1, 1
-             ]
+            case portalTo of
+              Just otherSector ->
+                  let h1' = sectorFloor otherSector
+                   in [ x1, h1', y1,  0, 0
+                      , x2, h1', y2,  1, 0
+                      , x1, h1,  y1,  0, 1
+                      , x2, h1,  y2,  1, 1
+                      ]
+              Nothing ->
+                [  x1, h2, y1,  0, 0
+                 , x2, h2, y2,  1, 0
+                 , x1, h1, y1,  0, 1
+                 , x2, h1, y2,  1, 1
+                 ]
         elementBufferData
             = concat $ take sideDefCount $
                 iterate (map (+4)) ([0,1,2] ++ [2,1,3])
@@ -385,6 +394,10 @@ loop w = do
 
 updateView :: Window -> V3 GLfloat -> M44 GLfloat -> Game ()
 updateView w initV modelM = do
+    -- TODO: most of this stuff shouldn't be set on each update
+    glEnable GL_CULL_FACE
+    glFrontFace GL_CW
+    glCullFace GL_BACK
     glClearColor 0 0 0 1
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
