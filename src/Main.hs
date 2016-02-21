@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE BangPatterns     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
@@ -12,11 +13,12 @@ import           Control.Monad.Reader
 import           Data.IORef
 import           Data.Foldable
 import           Data.Maybe
+import           Data.List
 import           Data.Vector.V2
 import           Foreign
 import           Game
 import qualified Game.Waddle          as WAD
-import           Graphics.Triangulation.Delaunay
+import Graphics.Triangulation.Delaunay
 import           GLUtils
 import           Graphics.GL.Core33
 import           Graphics.UI.GLFW
@@ -31,7 +33,8 @@ import           GHC.TypeLits
 import           Data.Proxy
 import           Enemy
 import           Sky
-
+import           Triangulation
+import Debug.Trace
 
 
 width :: Int
@@ -100,23 +103,22 @@ constructSectors :: WAD.Level -> [Sector]
 constructSectors WAD.Level{..}
     -- acc -> data -> acc
     = let (result, _)
-            = foldl (\(sectors, res) linedef ->
+            = foldr (\linedef (sectors, res) ->
                         (insert sectors res linedef, res)
                     ) (emptySectors, result) levelLineDefs
        in result
         where emptySectors = map (\WAD.Sector{..} -> Sector {
-                                          sectorFloorPoints = []
-                                        , sectorWalls       = []
+                                          sectorWalls       = []
                                         , sectorCeiling     = fromIntegral sectorCeilingHeight / scale
                                         , sectorFloor       = fromIntegral sectorFloorHeight / scale
                                     }
                                  ) levelSectors
               insert secs result linedef@WAD.LineDef{..}
-                = secs''
+                = secs'
                     where secs' = updateAt secs rightSector (\s -> insertLine s result linedef)
-                          secs'' = case leftSector of
-                                    Just justSect -> updateAt secs' justSect (\s -> insertLine s result linedef)
-                                    Nothing       -> secs'
+                          --secs'' = case leftSector of
+                          --          Just justSect -> updateAt secs' justSect (\s -> insertLine s result linedef)
+                          --          Nothing       -> secs'
                           rightSideDef
                             = levelSideDefs !! fromIntegral lineDefRightSideDef
                           leftSideDef
@@ -133,9 +135,7 @@ constructSectors WAD.Level{..}
               insertLine :: Sector -> [Sector] -> WAD.LineDef -> Sector
               insertLine sect@Sector{..} resSecs linedef@WAD.LineDef{..}
                 = sect{
-                          sectorFloorPoints
-                            = start : sectorFloorPoints
-                        , sectorWalls = Wall {
+                        sectorWalls = Wall {
                                   wallStart  = start
                                 , wallEnd    = end
                                 , wallSector = resSecs !! rightSector
@@ -187,7 +187,6 @@ main = do
                                     fromIntegral height)
                                 1
                                 400
-
 
     --sectors  <- arrayFrom levelSectors
     --sideDefs <- arrayFrom levelSideDefs
@@ -262,20 +261,38 @@ main = do
     bindMagic progId testData
 
     -- floor
+    print $ map (\Sector{..} -> length sectorWalls) sectors
     let floorVertexBufferData
             = concatMap (\Sector{..} ->
-                let ts = triangulate' sectorFloorPoints
+                --let -- !xs = traceShowId $ map wallPoints sectorWalls
+                --    -- !ys = traceShowId $ triangulation ts
+                --    -- !asd = error $ show $ map wallPoints (chainWalls sectorWalls)
+                --    ts = triangulation $ nub . concat $ map wallPoints (chainWalls sectorWalls)
+                let ts = triangulate' $ nub . concat $ map wallPoints sectorWalls
                  in concatMap (\(V2 x y) ->
                                 [x, sectorFloor, y]
-                    ) ts ++
-                    concatMap (\(V2 x y) ->
-                                [x, sectorCeiling, y]
-                    ) ts
+                    ) ts -- ++
+                    -- concatMap (\(V2 x y) ->
+                    --             [x, sectorCeiling, y]
+                    -- ) ts
               ) sectors
         triangulate' points
             = map vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
                 $ triangulate (map v2ToVector2 points)
         v2ToVector2 (V2 a b) = Vector2 (realToFrac a) (realToFrac b)
+        wallPoints Wall{..} = [wallStart, wallEnd]
+        findItem f [] = error "findItem: item not found"
+        findItem f (x : xs)
+            | f x = (x, xs)
+            | otherwise = let (y, ys) = findItem f xs in (y, x : ys)
+        chainWalls [] = []
+        chainWalls [w] = [w]
+        chainWalls (w : ws)
+            = let (w', ws') = findItem (\wall -> wallEnd wall == wallStart w) ws
+               in w : chainWalls (w' : ws')
+               --in case w' of
+               --     [found] -> w : chainWalls (found : ws')
+               --     []      -> []
         vector2Tov2 (Vector2 a b) = V2 (realToFrac a) (realToFrac b)
 
     --print floorElementBufferData
@@ -292,15 +309,15 @@ main = do
     floorVertS <- loadShader GL_VERTEX_SHADER "src/shaders/floor.vert"
     floorFragS <- loadShader GL_FRAGMENT_SHADER "src/shaders/floor.frag"
     floorProgId <- glCreateProgram
-    glAttachShader floorProgId vertS
-    glAttachShader floorProgId fragS
+    glAttachShader floorProgId floorVertS
+    glAttachShader floorProgId floorFragS
+    FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
 
     glLinkProgram floorProgId
     glUseProgram floorProgId
     glDeleteShader floorVertS
     glDeleteShader floorFragS
 
-    FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
     Uniform floorProgId "proj" $= projTrans
 
     bindMagic floorProgId floorData
@@ -423,7 +440,10 @@ updateView w initV modelM = do
     let floorProgId = rdProg floorRd'
     glUseProgram floorProgId
     bindRenderData floorRd'
+    --glPolygonMode GL_FRONT_AND_BACK GL_LINE
+    glLineWidth 1
     glDrawArrays GL_TRIANGLES 0 50000 -- TODO: need actual number
+    glPolygonMode GL_FRONT_AND_BACK GL_FILL
 
     Uniform floorProgId "model" $= modelM
     Uniform floorProgId "view"  $= viewTrans
