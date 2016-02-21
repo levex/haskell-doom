@@ -176,13 +176,12 @@ main = do
     let level@WAD.Level{..} = head $ toList wadLevels
         vertexData    = map vertexToVect levelVertices
         levelEnemies  = [mkEnemy t | t <- levelThings, DEnemy e <- [classifyThingType (WAD.thingType t)]]
-        mLineDefs     = filter (not . twoSidedLineDef) levelLineDefs
         posThing = head $
             filter (\t -> WAD.thingType t == WAD.Player1StartPos) levelThings
         posX = fromIntegral (WAD.thingX posThing) / scale
         posY = fromIntegral (WAD.thingY posThing) / scale
         sideDefCount
-             = sum $ map (\l -> 1 + fromEnum (twoSidedLineDef l)) mLineDefs
+             = length levelSideDefs
         sectors
              = constructSectors level
 
@@ -209,19 +208,17 @@ main = do
                  ]
 
     let vertexBufferData = do
-            WAD.LineDef{..} <- mLineDefs
-            let pos1 = fromIntegral lineDefStartVertex
-                pos2 = fromIntegral lineDefEndVertex
-                (V2 x1 y1)
-                     = vertexData !! pos1
-                (V2 x2 y2)
-                     = vertexData !! pos2
-                rightSide = fromSide lineDefRightSideDef (x1, y1) (x2, y2)
-                leftSide  = case lineDefLeftSideDef of
-                             Just left -> fromSide left (x1, y1) (x2, y2)
-                             Nothing -> []
-
-            rightSide ++ leftSide
+            Sector{..} <- sectors
+            Wall{..}   <- sectorWalls
+            let h1 = sectorFloor
+                h2 = sectorCeiling
+                V2 x1 y1 = wallStart
+                V2 x2 y2 = wallEnd
+            [  x1, h2, y1,  0, 0
+             , x2, h2, y2,  1, 0
+             , x1, h1, y1,  0, 1
+             , x2, h1, y2,  1, 1
+             ]
         elementBufferData
             = concat $ take sideDefCount $
                 iterate (map (+4)) ([0,1,2] ++ [2,1,3])
@@ -434,7 +431,7 @@ updateView w initV modelM = do
     let floorProgId = rdProg floorRd'
     glUseProgram floorProgId
     bindRenderData floorRd'
-    glDrawArrays GL_TRIANGLES 0 50000
+    glDrawArrays GL_TRIANGLES 0 50000 -- TODO: need actual number
 
     Uniform floorProgId "model" $= modelM
     Uniform floorProgId "view"  $= viewTrans
