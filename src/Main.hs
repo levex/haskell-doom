@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE RecursiveDo     #-}
 {-# LANGUAGE BangPatterns     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -15,6 +16,7 @@ import           Data.Foldable
 import           Data.Maybe
 import           Data.List
 import           Data.Vector.V2
+import qualified Data.Map as M
 import           Foreign
 import           Game
 import qualified Game.Waddle          as WAD
@@ -136,10 +138,13 @@ constructSectors WAD.Level{..}
               insertLine sect@Sector{..} resSecs linedef@WAD.LineDef{..}
                 = sect{
                         sectorWalls = Wall {
-                                  wallStart  = start
-                                , wallEnd    = end
-                                , wallSector = resSecs !! rightSector
-                                , portalTo   = (resSecs !!) <$> leftSector
+                                  wallStart   = start
+                                , wallEnd     = end
+                                , wallSector  = resSecs !! rightSector
+                                , portalTo    = (resSecs !!) <$> leftSector
+                                , lowerTex    = WAD.sideDefLowerTextureName rightSideDef
+                                , middleTex   = WAD.sideDefMiddleTextureName rightSideDef
+                                , upperTex    = WAD.sideDefUpperTextureName rightSideDef
                             } : sectorWalls
                     }
                         where rightSideDef
@@ -200,31 +205,30 @@ main = do
               Just otherSector ->
                   let h1' = sectorFloor otherSector
                       h2' = sectorCeiling otherSector
-                   in [ quad wallStart wallEnd h1' h1
-                      , quad wallStart wallEnd h2 h2'
+                   in [ (lowerTex, quad wallStart wallEnd h1' h1)
+                      , (upperTex, quad wallStart wallEnd h2 h2')
                       ]
               Nothing ->
-                  return $ quad wallStart wallEnd h2 h1
+                  return $ (middleTex, quad wallStart wallEnd h2 h1)
         quad (V2 x y) (V2 x' y') h' h
             = [ x,  h', y,  0, 0
               , x', h', y', 1, 0
               , x,  h,  y,  0, 1
               , x', h,  y', 1, 1
               ]
-        vertexBufferData = concat vertexBufferData'
-        sideDefCount     = length vertexBufferData
+        textToVert'
+            = M.fromList
+                $ map (\xs@((tex, _) : _) -> (tex, concatMap snd xs))
+                $ groupBy (\(t1, _) (t2, _) -> t1 == t2)
+                $ sortOn fst vertexBufferData'
+        textToVert
+            = M.delete "-" textToVert'
+
+    let dat      = concatMap snd . M.toList $ textToVert
+        sideDefCount = length dat
         elementBufferData
             = concat $ take sideDefCount $
                 iterate (map (+4)) ([0,1,2] ++ [2,1,3])
-
-    let testData :: BufferData [ '("position", 3), '("texcoord", 2)] GLfloat
-        testData = BufferData vertexBufferData
-
-    vertexBufferId <- withNewPtr (glGenBuffers 1)
-    glBindBuffer GL_ARRAY_BUFFER vertexBufferId
-
-    vertexArrayId <- withNewPtr (glGenVertexArrays 1)
-    glBindVertexArray vertexArrayId
 
     elementBufferId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ELEMENT_ARRAY_BUFFER elementBufferId
@@ -234,9 +238,9 @@ main = do
                      (elems :: Ptr GLuint)
                      GL_STATIC_DRAW
 
+    progId <- glCreateProgram
     vertS <- loadShader GL_VERTEX_SHADER "src/shaders/triangle.vert"
     fragS <- loadShader GL_FRAGMENT_SHADER "src/shaders/triangle.frag"
-    progId <- glCreateProgram
     glAttachShader progId vertS
     glAttachShader progId fragS
 
@@ -248,6 +252,29 @@ main = do
     FragShaderLocation progId "outColor" $= FragDiffuseColor
     Uniform progId "proj" $= projTrans
 
+    levelRData <- forM (M.toList textToVert) $ \(texName, verts) -> do
+        let vertData :: BufferData [ '("position", 3), '("texcoord", 2)] GLfloat
+            vertData = BufferData verts
+        vertexBufferId <- withNewPtr (glGenBuffers 1)
+        glBindBuffer GL_ARRAY_BUFFER vertexBufferId
+
+        texId <- getTextureId wad texName
+
+        vertexArrayId <- withNewPtr (glGenVertexArrays 1)
+        glBindVertexArray vertexArrayId
+
+        bindMagic progId vertData
+
+        return RenderData {
+                  rdVbo  = vertexBufferId
+                , rdEbo  = elementBufferId
+                , rdTex  = texId
+                , rdProg = progId
+                , rdVao  = vertexArrayId
+            }
+
+    --vertexBufferId <- withNewPtr (glGenBuffers 1)
+    --glBindBuffer GL_ARRAY_BUFFER vertexBufferId
 
     spriteVert <- loadShader GL_VERTEX_SHADER "src/shaders/sprite.vert"
     spriteFrag <- loadShader GL_FRAGMENT_SHADER "src/shaders/sprite.frag"
@@ -258,10 +285,9 @@ main = do
     glDeleteShader spriteVert
     glDeleteShader spriteFrag
 
-    bindMagic progId testData
+    --bindMagic progId testData
 
     -- floor
-    print $ map (\Sector{..} -> length sectorWalls) sectors
     let floorVertexBufferData
             = concatMap (\Sector{..} ->
                 --let -- !xs = traceShowId $ map wallPoints sectorWalls
@@ -271,10 +297,10 @@ main = do
                 let ts = triangulate' $ nub . concat $ map wallPoints sectorWalls
                  in concatMap (\(V2 x y) ->
                                 [x, sectorFloor, y]
-                    ) ts -- ++
-                    -- concatMap (\(V2 x y) ->
-                    --             [x, sectorCeiling, y]
-                    -- ) ts
+                    ) ts ++
+                    concatMap (\(V2 x y) ->
+                                [x, sectorCeiling, y]
+                    ) ts
               ) sectors
         triangulate' points
             = map vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
@@ -328,17 +354,16 @@ main = do
 
     let playerPos = V3 posX 1.6 posY
 
-    testSprite <- makeSprite wad spriteProgId "HEAD"
-    texId <- getTextureId wad
-    let levelData = RenderData { rdVbo  = vertexBufferId
-                               , rdEbo  = elementBufferId
-                               , rdTex  = texId
-                               , rdProg = progId
-                               , rdVao  = vertexArrayId
-                               }
-    let floorData = RenderData { rdVbo  = floorVertexBufferId
+    --texId <- getTextureId wad
+    --let levelData = RenderData { rdVbo  = vertexBufferId
+    --                           , rdEbo  = elementBufferId
+    --                           , rdTex  = texId
+    --                           , rdProg = progId
+    --                           , rdVao  = vertexArrayId
+    --                           }
+    let floorRData = RenderData { rdVbo  = floorVertexBufferId
                                , rdEbo  = 0
-                               , rdTex  = texId
+                               , rdTex  = 0
                                , rdProg = floorProgId
                                , rdVao  = floorVertexArrayId
                                }
@@ -346,9 +371,9 @@ main = do
     initState <- GameState <$> return progId
                            <*> return wad
                            <*> return sideDefCount
-                           <*> pure levelData
-                           <*> pure floorData
-                           <*> pure [testSprite]
+                           <*> pure levelRData
+                           <*> pure floorRData
+                           <*> pure []
                            <*> newIORef undefined -- TODO: current sector
                            <*> newIORef 0
                            <*> newIORef playerPos
@@ -366,9 +391,9 @@ extendToV4 (V3 x z y) = V4 x z y 1
 getCurrentPlayerPos :: Pos -> Game Pos
 getCurrentPlayerPos pos = return pos
 
-getTextureId :: WAD.Wad -> IO GLuint
-getTextureId wad = do
-    (tW, tH, txt) <- loadTexture wad "BIGDOOR7"
+getTextureId :: WAD.Wad -> WAD.LumpName -> IO GLuint
+getTextureId wad name = do
+    (tW, tH, txt) <- loadTexture wad name
     texId <- withNewPtr (glGenTextures 1)
     glBindTexture GL_TEXTURE_2D texId
 
@@ -396,7 +421,7 @@ loop w = do
 
     gameLogic
     updateView w initV modelM
-    glUseProgram (rdProg levelRd')
+    --glUseProgram (rdProg levelRd')
     keyEvents w move
 
 
@@ -411,6 +436,7 @@ updateView w initV modelM = do
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
     progId' <- asks progId
+    glUseProgram progId'
 
     Uniform progId' "model" $= modelM
 
@@ -432,9 +458,13 @@ updateView w initV modelM = do
     sdefc   <- asks sideDefs
     levelRd' <- asks levelRd
 
-    glUseProgram (rdProg levelRd')
-    bindRenderData levelRd'
-    glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
+    forM_ levelRd' $ \level -> do
+      bindRenderData level
+      glBindVertexArray (rdVao level)
+      glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
+
+    --glUseProgram (rdProg levelRd')
+    --bindRenderData levelRd'
 
     floorRd' <- asks floorRd
     let floorProgId = rdProg floorRd'

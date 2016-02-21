@@ -20,12 +20,12 @@ newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)
 
 data GameState = GameState {
-        progId   :: GLuint
-      , wad      :: WAD.Wad
-      , sideDefs :: Int
-      , levelRd  :: RenderData
-      , floorRd  :: RenderData
-      , sprites  :: [Sprite]
+        progId        :: GLuint
+      , wad           :: WAD.Wad
+      , sideDefs      :: Int
+      , levelRd       :: [RenderData]
+      , floorRd       :: RenderData
+      , sprites       :: [Sprite]
       , currentSector :: IORef Sector
       , rot           :: IORef GLfloat
       , player        :: IORef Pos
@@ -62,10 +62,13 @@ data Sector = Sector {
 } deriving Show
 
 data Wall = Wall {
-      wallStart  :: Vertex2D
-    , wallEnd    :: Vertex2D
-    , wallSector :: Sector
-    , portalTo   :: Maybe Sector
+      wallStart   :: Vertex2D
+    , wallEnd     :: Vertex2D
+    , wallSector  :: Sector
+    , portalTo    :: Maybe Sector
+    , lowerTex    :: WAD.LumpName
+    , middleTex   :: WAD.LumpName
+    , upperTex    :: WAD.LumpName
 }
 
 -- For floor and ceiling rendering
