@@ -30,9 +30,7 @@ import           Data.Array.IO
 import           GHC.TypeLits
 import           Data.Proxy
 import           Enemy
-import           Flat
 import           Sky
-import Debug.Trace
 
 
 
@@ -106,7 +104,13 @@ constructSectors WAD.Level{..}
                         (insert sectors res linedef, res)
                     ) (emptySectors, result) levelLineDefs
        in result
-        where emptySectors = Sector [] [] <$ levelSectors
+        where emptySectors = map (\WAD.Sector{..} -> Sector {
+                                          sectorFloorPoints = []
+                                        , sectorWalls       = []
+                                        , sectorCeiling     = fromIntegral sectorCeilingHeight / scale
+                                        , sectorFloor       = fromIntegral sectorFloorHeight / scale
+                                    }
+                                 ) levelSectors
               insert secs result linedef@WAD.LineDef{..}
                 = secs''
                     where secs' = updateAt secs rightSector (\s -> insertLine s result linedef)
@@ -127,8 +131,8 @@ constructSectors WAD.Level{..}
                 = let ~(left, a : right) = splitAt at secs
                    in left ++ [f a] ++ right
               insertLine :: Sector -> [Sector] -> WAD.LineDef -> Sector
-              insertLine Sector{..} resSecs linedef@WAD.LineDef{..}
-                = Sector {
+              insertLine sect@Sector{..} resSecs linedef@WAD.LineDef{..}
+                = sect{
                           sectorFloorPoints
                             = start : sectorFloorPoints
                         , sectorWalls = Wall {
@@ -266,10 +270,15 @@ main = do
     bindMagic progId testData
 
     -- floor
-    let floorVertexBufferData'
-            = concatMap (triangulate' . sectorFloorPoints) sectors
-        floorVertexBufferData
-            = concatMap (\(V2 x y) -> [x, 0, y]) floorVertexBufferData'
+    let floorVertexBufferData
+            = concatMap (\Sector{..} ->
+                concatMap (\(V2 x y) ->
+                            [x, sectorFloor, y]
+                ) (triangulate' sectorFloorPoints) ++
+                concatMap (\(V2 x y) ->
+                            [x, sectorCeiling, y]
+                ) (triangulate' sectorFloorPoints)
+              ) sectors
         triangulate' points
             = map vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
                 $ triangulate (map v2ToVector2 points)
@@ -338,7 +347,7 @@ main = do
                            <*> pure levelData
                            <*> pure floorData
                            <*> pure [testSprite]
-                           <*> newIORef (Sector undefined undefined)
+                           <*> newIORef undefined -- TODO: current sector
                            <*> newIORef 0
                            <*> newIORef playerPos
                            <*> newIORef levelEnemies
@@ -425,7 +434,7 @@ updateView w initV modelM = do
     let floorProgId = rdProg floorRd'
     glUseProgram floorProgId
     bindRenderData floorRd'
-    glDrawArrays GL_TRIANGLES 0 5000
+    glDrawArrays GL_TRIANGLES 0 50000
 
     Uniform floorProgId "model" $= modelM
     Uniform floorProgId "view"  $= viewTrans

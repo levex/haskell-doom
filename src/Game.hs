@@ -55,8 +55,10 @@ type ColorPalette = [[(Word8, Word8, Word8)]]
 type Vertex2D = V2 GLfloat
 
 data Sector = Sector {
-      sectorFloorPoints    :: [Vertex2D]
-    , sectorWalls          :: [Wall]
+      sectorFloorPoints :: [Vertex2D]
+    , sectorWalls       :: [Wall]
+    , sectorCeiling     :: GLfloat
+    , sectorFloor       :: GLfloat
 } deriving Show
 
 data Wall = Wall {
