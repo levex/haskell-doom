@@ -1,7 +1,6 @@
 module Triangulation where
 import Linear hiding (cross)
 import Data.List
-import Debug.Trace
 
 clockwise :: (Num a, Ord a) => V2 a -> V2 a -> V2 a -> Bool
 clockwise o a b = (a - o) `cross` (b - o) <= 0

@@ -14,7 +14,7 @@ import           Linear
 import           Data.IORef
 import           Enemy
 import           Types
-import           Var
+import           Data.Var
 
 newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)

@@ -1,20 +1,51 @@
-{-# LANGUAGE FlexibleInstances,
-             ScopedTypeVariables,
-             FlexibleContexts,
-             DataKinds,
-             TypeFamilies,
-             MultiParamTypeClasses,
-             ExistentialQuantification #-}
-module GLUtils where
-import Var
-import Graphics.GL.Core33
-import Control.Monad.IO.Class
-import Foreign.C.String
-import Foreign
-import Linear
-import Control.Monad
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
-type ProgId = GLuint
+module Graphics.Binding where
+import Control.Monad
+import Control.Monad.IO.Class
+import Data.Proxy
+import Data.Var
+import Foreign
+import Foreign.C.String
+import GHC.TypeLits
+import Graphics.GL
+import Graphics.Program
+import Graphics.Shader
+import Linear
+
+data Bindable (k :: [(Symbol, GLSLType)]) a = Bindable [a]
+
+bindVertexData :: forall a i u m.
+    (Storable a, GLTypeable a, TypeInfo i, MonadIO m) =>
+    Program i u -> Bindable i a -> m ()
+bindVertexData (Program progId) (Bindable bdata) = liftIO $ do
+    withArrayLen bdata $ \len vertices ->
+        glBufferData GL_ARRAY_BUFFER
+                     (fromIntegral $ len * dataSize)
+                     (vertices :: Ptr a)
+                     GL_STATIC_DRAW
+    foldM_ (\offset (name, size) -> do
+            attrib <- get $ AttribLocation progId name
+            glEnableVertexAttribArray attrib
+            glVertexAttribPointer attrib
+                                  size
+                                  (glType proxy)
+                                  (fromBool False)
+                                  (fromIntegral $ totalSize * dataSize)
+                                  offset
+            return (offset `plusPtr` fromIntegral (size * fromIntegral dataSize))
+        ) nullPtr (map (fmap (fromIntegral . glslTypeSize)) extracted)
+    where extracted = extract (Proxy :: Proxy i)
+          totalSize = fromIntegral $ sum . map (glslTypeSize . snd) $ extracted
+          dataSize  = sizeOf proxy
+          proxy   = undefined :: a
 
 -- Attribute location
 data AttribLocation a = AttribLocation ProgId String
@@ -26,37 +57,37 @@ instance (MonadIO m, Num a) => HasGetter m (AttribLocation a) a where
 -- Uniform binding
 data Uniform a = Uniform ProgId String
 
-instance (MonadIO m, UniformBinding a, Storable a) => HasSetter m (Uniform a) a where
+instance (MonadIO m, HasBinder a) => HasSetter m (Uniform a) a where
     (Uniform progId name) $= uniData = liftIO $ do
         uniId <- withCString name $ glGetUniformLocation progId
         bindUniform uniData (fromIntegral uniId) 1
 
-class Storable v => UniformBinding v where
+class Storable v => HasBinder v where
     bindFunc :: v -> GLint -> GLsizei -> Ptr a -> IO ()
     bindUniform :: MonadIO m => v -> GLint -> GLsizei -> m ()
     bindUniform val loc count = liftIO $
             with val $ \trans -> bindFunc val loc count trans
 
-instance UniformBinding (M44 GLfloat) where
+instance HasBinder (M44 GLfloat) where
     bindFunc _ = matrixBinder glUniformMatrix4fv
 
-instance UniformBinding (M33 GLfloat) where
+instance HasBinder (M33 GLfloat) where
     bindFunc _ = matrixBinder glUniformMatrix3fv
 
-instance UniformBinding (M23 GLfloat) where
+instance HasBinder (M23 GLfloat) where
     bindFunc _ = matrixBinder glUniformMatrix2x3fv
 -- TODO: add other matrices
 
-instance UniformBinding (V4 GLfloat) where
+instance HasBinder (V4 GLfloat) where
     bindFunc _ = vectorBinder glUniform4fv
 
-instance UniformBinding (V3 GLfloat) where
+instance HasBinder (V3 GLfloat) where
     bindFunc _ = vectorBinder glUniform3fv
 
-instance UniformBinding (V2 GLfloat) where
+instance HasBinder (V2 GLfloat) where
     bindFunc _ = vectorBinder glUniform2fv
 
-instance UniformBinding (V1 GLfloat) where
+instance HasBinder (V1 GLfloat) where
     bindFunc _ = vectorBinder glUniform1fv
 -- TODO: add other vectors (GLint)
 
@@ -72,31 +103,7 @@ vectorBinder :: MonadIO m =>
 vectorBinder f loc count val
     = liftIO $ f loc count (castPtr val)
 
--- Misc aux. functions
-offsetPtr :: Storable a => Int -> a -> Ptr GLvoid
-offsetPtr x s = plusPtr nullPtr (fromIntegral $ x * sizeOf s)
-
-withNewPtr :: Storable a => (Ptr a -> IO b) -> IO a
-withNewPtr f = alloca (\p -> f p >> get p)
-
-loadShader :: GLenum -> FilePath -> IO GLuint
-loadShader shaderTypeFlag filePath = do
-  code <- readFile filePath
-  shader <- glCreateShader shaderTypeFlag
-  withCString code $ \codePtr ->
-    with codePtr $ \codePtrPtr ->
-      glShaderSource shader 1 codePtrPtr nullPtr
-  glCompileShader shader
-  status <- toBool <$> withNewPtr (glGetShaderiv shader GL_COMPILE_STATUS)
-  unless status $
-      alloca $ \err -> do
-          glGetShaderInfoLog shader 512 nullPtr err
-          err' <- peekCString err
-          error err'
-  return shader
-
 -- Fragment shader
-
 data FragmentShaderField
     = FragDiffuseColor  -- 0
     | FragMaterialID    -- 1
@@ -112,14 +119,3 @@ instance MonadIO m => HasSetter m FragShaderLocation FragmentShaderField where
         = liftIO . withCString name $
             glBindFragDataLocation progId (fromIntegral $ fromEnum loc)
 
--- GL typeable stuff
-class GLTypeable a where
-    glType :: a -> Word32
-
-instance GLTypeable GLfloat where
-    glType _ = GL_FLOAT
-
-instance GLTypeable GLint where
-    glType _ = GL_INT
-
--- TODO: etc

@@ -1,10 +1,6 @@
-{-# LANGUAGE StandaloneDeriving #-}
 module Sprite where
--- TODO: prune
 import           Control.Monad
-import           Control.Monad.Reader
 import           Data.CaseInsensitive hiding (map)
-import           Data.Foldable
 import           Data.IORef
 import           Data.Array.IO         as AI
 import qualified Data.ByteString       as BS
@@ -13,19 +9,15 @@ import qualified Data.Map              as M
 import           Data.Maybe
 import           Data.Char
 import           Foreign
-import           Foreign.C.String
 import           Game
 import qualified Game.Waddle           as WAD
-import           GLUtils
+import           Graphics.GLUtils
 import           Graphics.GL.Core33
-import           Graphics.UI.GLFW
 import           Linear
-import           Var
-import           Window
-import           Types
+import           Data.Var
 import           TextureLoader
 import           SpriteMap
-import           Data.Array.IO
+import           Graphics.Binding
 
 testSpriteVbo :: [GLfloat]
 testSpriteVbo = [
@@ -165,6 +157,7 @@ makeSprite' vbo ebo thing wad progId spriteName' = do
                      rdProg = progId,
                      rdEbo = eboId}
 
+  -- TODO: what is this?!
   let v3 = if isNothing thing then
               (V3 (vbo !! 0) (vbo !! 1) (vbo !! 2))
            else let jt = fromJust thing in

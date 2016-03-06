@@ -1,93 +1,45 @@
 {-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE RecursiveDo     #-}
-{-# LANGUAGE BangPatterns     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Main where
 import           Control.Monad
 import           Control.Monad.Reader
-import           Data.IORef
+import           Data.Array.IO
+import           Data.CaseInsensitive hiding (map)
 import           Data.Foldable
-import           Data.Maybe
+import           Data.IORef
 import           Data.List hiding (map)
+import           Data.Maybe
 import           Data.Vector.V2
-import qualified Data.Map as M
+import           Enemy
 import           Foreign
 import           Game
-import qualified Game.Waddle          as WAD
-import Graphics.Triangulation.Delaunay
-import           GLUtils
 import           Graphics.GL.Core33
+import           Graphics.GLUtils
+import           Graphics.Shader
+import           Graphics.Binding
+import           Graphics.Program
 import           Graphics.UI.GLFW
-import           Data.CaseInsensitive
 import           Linear
-import           Var
-import           Types
-import           Window
+import           Sky
 import           Sprite
 import           TextureLoader
-import           Data.Array.IO
-import           GHC.TypeLits
-import           Data.Proxy
-import           Enemy
-import           Sky
 import           Triangulation
-import           Flat
-import           Sky
-import Debug.Trace
+import           Types
+import           Data.Var
+import           Window
+import Graphics.Triangulation.Delaunay
+import qualified Data.Map as M
+import qualified Game.Waddle          as WAD
 
 
 width :: Int
 height :: Int
 (width, height) = (1280, 1024)
-
-class BufferStuff a where
-    extract :: proxy a -> [(String, Int)]
-
-instance BufferStuff (BufferData '[] a) where
-    extract _ = []
-
-instance forall nat sym xs a. (KnownNat nat, KnownSymbol sym, BufferStuff
-                              (BufferData xs a)) => BufferStuff (BufferData
-                              ('(sym, nat) ': xs) a) where
-    extract _ = h : t
-            where h = ( symbolVal (Proxy :: Proxy sym)
-                      , fromIntegral $ natVal (Proxy :: Proxy nat))
-                  t = extract (Proxy :: Proxy (BufferData xs a))
-
-data BufferData (k :: [(Symbol, Nat)]) a = BufferData [a]
-
--- TODO: not a good name
-bindMagic :: forall a desc m.
-    (Storable a, GLTypeable a, BufferStuff (BufferData desc a), MonadIO m) =>
-    GLuint -> BufferData desc a -> m ()
-bindMagic progId (BufferData bdata) = liftIO $ do
-    --TODO: ugly
-    withArrayLen bdata $ \len vertices ->
-        glBufferData GL_ARRAY_BUFFER
-                     (fromIntegral $ len * dataSize)
-                     (vertices :: Ptr a)
-                     GL_STATIC_DRAW
-    foldM_ (\offset (name, size) -> do
-            attrib <- get $ AttribLocation progId name
-            glEnableVertexAttribArray attrib
-            glVertexAttribPointer attrib
-                                  size
-                                  (glType proxy)
-                                  (fromBool False)
-                                  (fromIntegral $ totalSize * dataSize)
-                                  offset
-            return (offset `plusPtr` fromIntegral (size * fromIntegral dataSize))
-        ) nullPtr ((<$>) (fmap fromIntegral) extracted)
-    where extracted = extract (Proxy :: Proxy (BufferData desc a))
-          totalSize = fromIntegral $ sum . (<$>) snd $ extracted
-          dataSize  = sizeOf proxy
-          proxy   = undefined :: a
 
 vertexToVect :: WAD.Vertex -> V2 GLfloat
 vertexToVect (WAD.Vertex x y)
@@ -109,7 +61,7 @@ constructSectors WAD.Level{..}
                         (insert sectors res linedef, res)
                     ) (emptySectors, result) levelLineDefs
        in result
-        where emptySectors =  (<$>) (\WAD.Sector{..} -> Sector {
+        where emptySectors =  map (\WAD.Sector{..} -> Sector {
                                           sectorWalls       = []
                                         , sectorCeiling     = fromIntegral sectorCeilingHeight / scale
                                         , sectorFloor       = fromIntegral sectorFloorHeight / scale
@@ -165,10 +117,10 @@ constructSectors WAD.Level{..}
 -- these are evil
 constructSubSectors :: WAD.Level -> [Subsector]
 constructSubSectors WAD.Level{..}
-    = (<$>) (Subsector . subsectorPoints) levelSSectors
+    = map (Subsector . subsectorPoints) levelSSectors
         where subsectorPoints :: WAD.SSector -> [Vertex2D]
               subsectorPoints WAD.SSector{..}
-                = (<$>) (\WAD.Seg{..} ->
+                = map (\WAD.Seg{..} ->
                     vertexToVect $ levelVertices !! fromIntegral segStartVertex)
                     $ take (fromIntegral ssectorSegCount)
                         . drop (fromIntegral ssectorSegStart)
@@ -218,7 +170,7 @@ main = do
               ]
         textToVert'
             = M.fromList
-                $ (<$>) (\xs@((tex, _) : _) -> (tex, concatMap snd xs))
+                $ map (\xs@((tex, _) : _) -> (tex, concatMap snd xs))
                 $ groupBy (\(t1, _) (t2, _) -> t1 == t2)
                 $ sortOn fst vertexBufferData'
         textToVert
@@ -228,7 +180,7 @@ main = do
         sideDefCount = length dat
         elementBufferData
             = concat $ take sideDefCount $
-                iterate ((<$>) (+4)) ([0,1,2] ++ [2,1,3])
+                iterate (map (+4)) ([0,1,2] ++ [2,1,3])
 
     elementBufferId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ELEMENT_ARRAY_BUFFER elementBufferId
@@ -238,23 +190,12 @@ main = do
                      (elems :: Ptr GLuint)
                      GL_STATIC_DRAW
 
-    progId <- glCreateProgram
-    vertS <- loadShader GL_VERTEX_SHADER "src/shaders/triangle.vert"
-    fragS <- loadShader GL_FRAGMENT_SHADER "src/shaders/triangle.frag"
-    glAttachShader progId vertS
-    glAttachShader progId fragS
-
-    glLinkProgram progId
-    glUseProgram progId
-    glDeleteShader vertS
-    glDeleteShader fragS
+    program@(Program progId) <- mkProgram wallVert wallFrag
 
     FragShaderLocation progId "outColor" $= FragDiffuseColor
     Uniform progId "proj" $= projTrans
 
     levelRData <- forM (M.toList textToVert) $ \(texName, verts) -> do
-        let vertData :: BufferData [ '("position", 3), '("texcoord", 2)] GLfloat
-            vertData = BufferData verts
         vertexBufferId <- withNewPtr (glGenBuffers 1)
         glBindBuffer GL_ARRAY_BUFFER vertexBufferId
 
@@ -263,7 +204,7 @@ main = do
         vertexArrayId <- withNewPtr (glGenVertexArrays 1)
         glBindVertexArray vertexArrayId
 
-        bindMagic progId vertData
+        bindVertexData program (Bindable verts)
 
         return RenderData {
                   rdVbo  = vertexBufferId
@@ -271,21 +212,13 @@ main = do
                 , rdTex  = texId
                 , rdProg = progId
                 , rdVao  = vertexArrayId
+                , rdExtra = 0
             }
 
     --vertexBufferId <- withNewPtr (glGenBuffers 1)
     --glBindBuffer GL_ARRAY_BUFFER vertexBufferId
 
-    spriteVert <- loadShader GL_VERTEX_SHADER "src/shaders/sprite.vert"
-    spriteFrag <- loadShader GL_FRAGMENT_SHADER "src/shaders/sprite.frag"
-    spriteProgId <- glCreateProgram
-    glAttachShader spriteProgId spriteVert
-    glAttachShader spriteProgId spriteFrag
-    glLinkProgram spriteProgId
-    glDeleteShader spriteVert
-    glDeleteShader spriteFrag
-
-    --bindMagic progId testData
+    --spriteProgram@(Program spriteProgId) <- mkProgram spriteVert spriteFrag
 
     -- floor
     let floorVertexBufferData
@@ -294,7 +227,7 @@ main = do
                 --    -- !ys = traceShowId $ triangulation ts
                 --    -- !asd = error $ show $ map wallPoints (chainWalls sectorWalls)
                 --    ts = triangulation $ nub . concat $ map wallPoints (chainWalls sectorWalls)
-                let ts = triangulate' $ nub . concat $ (<$>) wallPoints sectorWalls
+                let ts = triangulate' $ nub . concat $ map wallPoints sectorWalls
                  in concatMap (\(V2 x y) ->
                                 [x, sectorFloor, y]
                     ) ts ++
@@ -303,8 +236,8 @@ main = do
                     ) ts
               ) sectors
         triangulate' points
-            = (<$>) vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
-                $ triangulate ((<$>) v2ToVector2 points)
+            = map vector2Tov2 . concatMap (\(a, b, c) -> [a, b, c])
+                $ triangulate (map v2ToVector2 points)
         v2ToVector2 (V2 a b) = Vector2 (realToFrac a) (realToFrac b)
         wallPoints Wall{..} = [wallStart, wallEnd]
         findItem f [] = error "findItem: item not found"
@@ -321,32 +254,18 @@ main = do
                --     []      -> []
         vector2Tov2 (Vector2 a b) = V2 (realToFrac a) (realToFrac b)
 
-    --print floorElementBufferData
-
-    let floorData :: BufferData '[ '("position", 3) ] GLfloat
-        floorData = BufferData floorVertexBufferData
-
     floorVertexBufferId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ARRAY_BUFFER floorVertexBufferId
 
     floorVertexArrayId <- withNewPtr (glGenVertexArrays 1)
     glBindVertexArray floorVertexArrayId
 
-    floorVertS <- loadShader GL_VERTEX_SHADER "src/shaders/floor.vert"
-    floorFragS <- loadShader GL_FRAGMENT_SHADER "src/shaders/floor.frag"
-    floorProgId <- glCreateProgram
-    glAttachShader floorProgId floorVertS
-    glAttachShader floorProgId floorFragS
+    floorProgram@(Program floorProgId) <- mkProgram floorVert floorFrag
+
     FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
-
-    glLinkProgram floorProgId
-    glUseProgram floorProgId
-    glDeleteShader floorVertS
-    glDeleteShader floorFragS
-
     Uniform floorProgId "proj" $= projTrans
 
-    bindMagic floorProgId floorData
+    bindVertexData floorProgram (Bindable floorVertexBufferData)
 
     glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
@@ -366,6 +285,7 @@ main = do
                                , rdTex  = 0
                                , rdProg = floorProgId
                                , rdVao  = floorVertexArrayId
+                               , rdExtra = 0
                                }
     sprites <- createLevelThings wad progId (WAD.levelThings level)
     let palette' = loadPalettes wad
@@ -388,12 +308,7 @@ main = do
 
 pistolWeapon :: WAD.Wad -> ColorPalette -> IO RenderData
 pistolWeapon wad palette = do
-    wepVert <- loadShader GL_VERTEX_SHADER "src/shaders/sprite.vert"
-    wepFrag <- loadShader GL_FRAGMENT_SHADER "src/shaders/sprite.frag"
-    wepProgId <- glCreateProgram
-    glAttachShader wepProgId wepVert
-    glAttachShader wepProgId wepFrag
-    glLinkProgram wepProgId
+    wepProgram@(Program wepProgId) <- mkProgram spriteVert spriteFrag
     glUseProgram wepProgId
 
     vaoId <- withNewPtr (glGenVertexArrays 1)
@@ -448,7 +363,7 @@ pistolWeapon wad palette = do
 
     withArray ftxt $
       glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) fW fH 0 GL_RGBA GL_FLOAT
-  
+
     posAttrib <- get $ AttribLocation wepProgId "position"
     glEnableVertexAttribArray posAttrib
     glVertexAttribPointer posAttrib
@@ -539,13 +454,6 @@ updateView w initV modelM = do
 
     Uniform progId' "view"  $= viewTrans
     
-    -- render the sky
-    glDepthMask (fromBool False)
-    sky' <- asks sky
-    bindRenderData sky'
-    glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
-    glDepthMask (fromBool True)
-
     -- render the sky
     glDepthMask (fromBool False)
     sky' <- asks sky

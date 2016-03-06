@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-module Var where
+module Data.Var where
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.IORef
