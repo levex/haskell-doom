@@ -71,7 +71,7 @@ texSampler = SVar
 wallVert :: Shader 150 '[Pos3, Tex2] '[Texcoord] '[Model, View, Proj] ()
 wallVert = do
     out texcoord =: inp tex2
-    var glPos =: (uni proj *: uni view *: uni model *: (inp pos3 &: float 1.0))
+    var glPos =: (uni proj *: uni view *: uni model *: (inp pos3 &: float 1))
 
 wallFrag :: Shader 150 '[Texcoord] '[Outcolor] '[TexSampler] ()
 wallFrag
@@ -88,7 +88,7 @@ spriteFrag = wallFrag
 
 floorVert :: Shader 150 '[Pos3] '[] '[Model, View, Proj] ()
 floorVert
-    = var glPos =: uni proj *: uni view *: uni model *: (inp pos3 &: pure (Scalar 1))
+    = var glPos =: uni proj *: uni view *: uni model *: (inp pos3 &: float 1)
 
 floorFrag :: Shader 150 '[] '[Outcolor] '[] ()
 floorFrag
