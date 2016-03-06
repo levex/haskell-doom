@@ -288,7 +288,7 @@ main = do
                                , rdVao  = floorVertexArrayId
                                , rdExtra = 0
                                }
-    sprites <- createLevelThings wad progId (WAD.levelThings level)
+    sprites <- createLevelThings wad program (WAD.levelThings level)
     let palette' = loadPalettes wad
     initState <- GameState <$> return program
                            <*> return wad

@@ -12,6 +12,8 @@ import           Foreign
 import           Game
 import qualified Game.Waddle           as WAD
 import           Graphics.GLUtils
+import           Graphics.Program
+import           Graphics.Shader
 import           Graphics.GL.Core33
 import           Linear
 import           Data.Var
@@ -52,7 +54,7 @@ loadSprite sprite = do
           writeArray pxArr (tx + ty * fW) pt
   getElems pxArr
 
-createLevelThings :: WAD.Wad -> GLuint -> [WAD.Thing] -> IO [Sprite]
+createLevelThings :: TypeInfo u => WAD.Wad -> Program u i -> [WAD.Thing] -> IO [Sprite]
 createLevelThings wad progId things
   = mapM (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad progId (thingToSprite $ WAD.thingType t))
         (filter (\t ->
@@ -72,7 +74,7 @@ createLevelThings wad progId things
         0, 1, 2,
         2, 1, 3]
 
-makeSprite :: WAD.Wad -> GLuint -> WAD.LumpName -> IO Sprite
+makeSprite :: TypeInfo u => WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
 makeSprite
   = makeSprite' testSpriteVbo testSpriteEbo Nothing
 
@@ -89,23 +91,20 @@ findSpriteName wad name
         na = chr ((ord a) + 1)
         nb = chr ((ord b) + 1)
 
-makeSprite' :: [GLfloat] -> [GLuint] -> Maybe WAD.Thing -> WAD.Wad -> GLuint -> WAD.LumpName -> IO Sprite
-makeSprite' vbo ebo thing wad progId spriteName' = do
+makeSprite' :: (TypeInfo u) => [GLfloat] -> [GLuint] -> Maybe WAD.Thing -> WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
+makeSprite' vbo ebo thing wad program@(Program progId) spriteName' = do
   let spriteName = if (length (BS.unpack spriteName') == 4) then
                     findSpriteName wad spriteName'
                    else
                     spriteName'
-      
+
   vaoId <- withNewPtr (glGenVertexArrays 1)
   glBindVertexArray vaoId
 
   vboId <- withNewPtr (glGenBuffers 1)
   glBindBuffer GL_ARRAY_BUFFER vboId
-  withArrayLen vbo $ \len vertices ->
-      glBufferData GL_ARRAY_BUFFER
-                    (fromIntegral $ len * sizeOf (0 :: GLfloat))
-                    (vertices :: Ptr GLfloat)
-                    GL_STATIC_DRAW
+
+  bindVertexData program (Bindable vbo)
 
   eboId <- withNewPtr (glGenBuffers 1)
   glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
@@ -132,24 +131,6 @@ makeSprite' vbo ebo thing wad progId spriteName' = do
   glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
   withArray spritePixels $
     glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) sW sH 0 GL_RGBA GL_FLOAT
-
-  posAttrib <- get $ AttribLocation progId "position"
-  glEnableVertexAttribArray posAttrib
-  glVertexAttribPointer posAttrib
-                        3
-                        GL_FLOAT
-                        (fromBool False)
-                        (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
-                        nullPtr
-
-  colAttrib <- get $ AttribLocation progId "texcoord"
-  glEnableVertexAttribArray colAttrib
-  glVertexAttribPointer colAttrib
-                        2
-                        GL_FLOAT
-                        (fromBool False)
-                        (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
-                        (offsetPtr 3 (0 :: GLfloat))
 
   let renderData = RenderData { rdVao = vaoId,
                      rdVbo = vboId,
