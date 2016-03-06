@@ -19,52 +19,42 @@ module Graphics.Shader
     , Tex2) where
 import Graphics.Shader.Internal as I
 import Graphics.Shader.Types as T
-import Graphics.Shader.Language as L
 
 -- TODO: swizzling
 
-type Pos3
-    = '("position", 'Vec3)
+type Pos3 = '("position", 'Vec3)
 pos3 :: SVar Pos3
 pos3 = SVar
 
-type Tex2
-    = '("texcoord", 'Vec2)
+type Tex2 = '("texcoord", 'Vec2)
 tex2 :: SVar Tex2
 tex2 = SVar
 
-type Texcoord
-    = '("Texcoord", 'Vec2)
+type Texcoord = '("Texcoord", 'Vec2)
 texcoord :: SVar Texcoord
 texcoord = SVar
 
-type GlPos
-    = '("gl_Position", 'Vec4)
+type GlPos = '("gl_Position", 'Vec4)
 glPos :: SVar GlPos
 glPos = SVar
 
-type Model
-    = '("model", 'Mat4)
+type Model = '("model", 'Mat4)
 model :: SVar Model
 model = SVar
 
-type View
-    = '("view", 'Mat4)
+type View = '("view", 'Mat4)
 view :: SVar View
 view = SVar
 
-type Proj
-    = '("proj", 'Mat4)
+type Proj = '("proj", 'Mat4)
 proj :: SVar Proj
 proj = SVar
 
-type Outcolor
-    = '("outColor", 'Vec4)
+type Outcolor = '("outColor", 'Vec4)
 outcolor :: SVar Outcolor
 outcolor = SVar
 
-type TexSampler
-    = '("tex", 'Sampler2D)
+type TexSampler = '("tex", 'Sampler2D)
 texSampler :: SVar TexSampler
 texSampler = SVar
 
