@@ -309,18 +309,21 @@ main = do
 pistolWeapon :: WAD.Wad -> ColorPalette -> IO RenderData
 pistolWeapon wad palette = do
     wepProgram@(Program wepProgId) <- mkProgram spriteVert spriteFrag
-    glUseProgram wepProgId
 
     vaoId <- withNewPtr (glGenVertexArrays 1)
     glBindVertexArray vaoId
 
     vboId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ARRAY_BUFFER vboId
-    withArrayLen vbo $ \len vertices ->
-      glBufferData GL_ARRAY_BUFFER
-                    (fromIntegral $ len * sizeOf (0 :: GLfloat))
-                    (vertices :: Ptr GLfloat)
-                    GL_STATIC_DRAW
+
+    let vbo = [-0.2, -0.1, 0.0,  0.0, 0.0,
+                0.2, -0.1, 0.0,  1.0, 0.0,
+               -0.2, -0.7, 0.0,  0.0, 1.0,
+                0.2, -0.7, 0.0,  1.0, 1.0]
+        ebo = [0, 1, 2,
+               2, 1, 3]
+
+    bindVertexData wepProgram (Bindable (vbo :: [Float]))
 
     eboId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
@@ -364,38 +367,12 @@ pistolWeapon wad palette = do
     withArray ftxt $
       glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) fW fH 0 GL_RGBA GL_FLOAT
 
-    posAttrib <- get $ AttribLocation wepProgId "position"
-    glEnableVertexAttribArray posAttrib
-    glVertexAttribPointer posAttrib
-                          3
-                          GL_FLOAT
-                          (fromBool False)
-                          (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
-                          nullPtr
-
-    colAttrib <- get $ AttribLocation wepProgId "texcoord"
-    glEnableVertexAttribArray colAttrib
-    glVertexAttribPointer colAttrib
-                          2
-                          GL_FLOAT
-                          (fromBool False)
-                          (fromIntegral $ 5 * sizeOf (0 :: GLfloat))
-                          (offsetPtr 3 (0 :: GLfloat))
-
-    return $ RenderData { rdVbo = vboId,
-                          rdEbo = eboId,
-                          rdTex = stillTexId,
-                          rdExtra = firingTexId,
-                          rdVao = vaoId,
-                          rdProg = wepProgId}
-    where
-      vbo = [-0.2, -0.1, 0.0,  0.0, 0.0,
-              0.2, -0.1, 0.0,  1.0, 0.0,
-             -0.2, -0.7, 0.0,  0.0, 1.0,
-              0.2, -0.7, 0.0,  1.0, 1.0]
-
-      ebo = [0, 1, 2,
-             2, 1, 3]
+    return  RenderData { rdVbo = vboId,
+                         rdEbo = eboId,
+                         rdTex = stillTexId,
+                         rdExtra = firingTexId,
+                         rdVao = vaoId,
+                         rdProg = wepProgId}
 
 getTextureId :: WAD.Wad -> WAD.LumpName -> IO GLuint
 getTextureId wad name = do
@@ -429,7 +406,6 @@ loop w = do
 
     gameLogic
     updateView w initV modelM
-    --glUseProgram (rdProg levelRd')
     keyEvents w move
 
 
@@ -453,7 +429,7 @@ updateView w initV modelM = do
                            (V3 0  1  0) :: M44 GLfloat
 
     Uniform progId' "view"  $= viewTrans
-    
+
     -- render the sky
     glDepthMask (fromBool False)
     sky' <- asks sky
@@ -471,12 +447,8 @@ updateView w initV modelM = do
       glBindVertexArray (rdVao level)
       glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
 
-    --glUseProgram (rdProg levelRd')
-    --bindRenderData levelRd'
-
     floorRd' <- asks floorRd
     let floorProgId = rdProg floorRd'
-    glUseProgram floorProgId
     bindRenderData floorRd'
     --glPolygonMode GL_FRONT_AND_BACK GL_LINE
     glLineWidth 1
@@ -486,11 +458,6 @@ updateView w initV modelM = do
     Uniform floorProgId "model" $= modelM
     Uniform floorProgId "view"  $= viewTrans
 
-    --let trans = mkTransformationMat identity (V3 0 4 0) :: M44 GLfloat
-    --    modelM' = trans !*! modelM
-    --Uniform progId' "model" $= modelM'
-    --glDrawArrays GL_LINES 0 (fromIntegral ldefc * 2)
-    -- draw sprite
     -- TODO: can be optimized to only bind program once...
     sprites' <- asks sprites
     forM_ sprites' $ \sprite -> do
@@ -531,7 +498,6 @@ keyEvents w move = do
       lastShot' <- asks lastShot
       io $ writeIORef lastShot' ticks''
       applyShot
-      
 
     keyW <- io $ getKey w Key'W
     when (keyW == KeyState'Pressed) $ do
