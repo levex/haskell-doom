@@ -27,11 +27,7 @@ data ExpFunctor a
     = Assignment Exp a
     deriving Functor
 
-newtype Shader (ver      :: Nat)
-               (inputs   :: [(Symbol, GLSLType)])
-               (outputs  :: [(Symbol, GLSLType)])
-               (uniforms :: [(Symbol, GLSLType)])
-               a
+newtype Shader (ver :: Nat) (i :: [Arg]) (o :: [Arg]) (u :: [Arg]) a
     = Shader (Free ExpFunctor a)
     deriving (Functor, Applicative, Monad)
 
@@ -75,17 +71,17 @@ showShader shader
 type LiftVar n i o u t =
          forall ver proxy.
          (KnownSymbol n, Expression (FromArg t)) =>
-         proxy '(n, t) -> Shader ver i o u (FromArg t)
+         proxy ('Arg n t) -> Shader ver i o u (FromArg t)
 
-inp :: forall n i o u t. Elem '(n, t) i => LiftVar n i o u t
+inp :: forall n i o u t. Elem ('Arg n t) i => LiftVar n i o u t
 inp _ = pure $ fromExpression (Var name)
     where name = symbolVal (Proxy :: Proxy n)
 
-out :: forall n i o u t. Elem '(n, t) o => LiftVar n i o u t
+out :: forall n i o u t. Elem ('Arg n t) o => LiftVar n i o u t
 out _ = pure $ fromExpression (Var name)
     where name = symbolVal (Proxy :: Proxy n)
 
-uni :: forall n i o u t. Elem '(n, t) u => LiftVar n i o u t
+uni :: forall n i o u t. Elem ('Arg n t) u => LiftVar n i o u t
 uni _ = pure $ fromExpression (Var name)
     where name = symbolVal (Proxy :: Proxy n)
 

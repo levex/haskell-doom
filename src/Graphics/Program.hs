@@ -3,14 +3,15 @@
 module Graphics.Program where
 
 import Graphics.Shader
+import Graphics.Shader.Types
 import GHC.TypeLits
 import Graphics.GL
 import Graphics.GLUtils
 
 type ProgId = GLuint
 
-data Program (inputs   :: [(Symbol, GLSLType)])
-             (uniforms :: [(Symbol, GLSLType)])
+data Program (inputs   :: [Arg])
+             (uniforms :: [Arg])
              = Program ProgId
 
 mkProgram :: ( KnownNat ver

@@ -12,6 +12,8 @@ import Graphics.GL
 import Data.Int
 import Data.Word
 
+data Arg = Arg Symbol GLSLType
+
 -- Convert between Haskell types and GL scalar primitives
 class GLTypeable a where
     glType :: a -> GLenum
@@ -78,14 +80,14 @@ glslTypeSize _    = undefined
 
 -- Extract type information from a list of type-level tuples.
 -- The shader variables are stored in this format at the type-level
-class TypeInfo (f :: [(Symbol, GLSLType)]) where
+class TypeInfo (f :: [Arg]) where
     extract :: proxy f -> [(String, GLSLType)]
 
 instance TypeInfo '[] where
     extract _ = []
 
 instance (KnownSymbol sym, KnownGLSLType arg, TypeInfo xs) =>
-    TypeInfo ('(sym, arg) ': xs) where
+    TypeInfo (('Arg sym arg) ': xs) where
     extract _ = ( symbolVal (Proxy :: Proxy sym)
                 , argVal (Proxy :: Proxy arg)
                 ) : extract (Proxy :: Proxy xs)

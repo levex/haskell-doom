@@ -14,13 +14,13 @@ import Data.Proxy
 import Data.Var
 import Foreign
 import Foreign.C.String
-import GHC.TypeLits
 import Graphics.GL
 import Graphics.Program
 import Graphics.Shader
+import Graphics.Shader.Types
 import Linear
 
-data Bindable (k :: [(Symbol, GLSLType)]) a = Bindable [a]
+data Bindable (k :: [Arg]) a = Bindable [a]
 
 bindVertexData :: forall a i u m.
     (Storable a, GLTypeable a, TypeInfo i, MonadIO m) =>
