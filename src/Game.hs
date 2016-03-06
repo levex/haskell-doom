@@ -1,15 +1,15 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE Rank2Types #-}
 module Game where
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Foreign.Ptr
 -- ugly
 import           Data.Word
 import qualified Game.Waddle          as WAD
+import           Graphics.Program
 import           Graphics.GL.Core33
-import           Graphics.UI.GLFW
 import           Linear
 import           Data.IORef
 import           Enemy
@@ -19,8 +19,8 @@ import           Data.Var
 newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)
 
-data GameState = GameState {
-        progId        :: GLuint
+data GameState u i = GameState {
+        prog          :: Program u i
       , wad           :: WAD.Wad
       , sideDefs      :: Int
       , levelRd       :: [RenderData]
@@ -95,7 +95,7 @@ bindRenderData rd = do
   glBindBuffer GL_ELEMENT_ARRAY_BUFFER (rdEbo rd)
   glBindTexture GL_TEXTURE_2D (rdTex rd)
 
-type Game a = GameMonad GameState a
+type Game a = forall u i. GameMonad (GameState u i) a
 
 
 runGame :: GameMonad e a -> e -> IO a

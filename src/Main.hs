@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE Rank2Types #-}
 module Main where
 import           Control.Monad
 import           Control.Monad.Reader
@@ -289,7 +290,7 @@ main = do
                                }
     sprites <- createLevelThings wad progId (WAD.levelThings level)
     let palette' = loadPalettes wad
-    initState <- GameState <$> return progId
+    initState <- GameState <$> return program
                            <*> return wad
                            <*> return sideDefCount
                            <*> pure levelRData
@@ -419,16 +420,16 @@ updateView w initV modelM = do
     glClearColor 0 0 0 1
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
     glClear (GL_COLOR_BUFFER_BIT .|. GL_DEPTH_BUFFER_BIT)
-    progId' <- asks progId
-    glUseProgram progId'
+    prog'@(Program progId) <- asks prog
+    glUseProgram progId
 
-    Uniform progId' "model" $= modelM
+    Uniform progId "model" $= modelM
 
     let viewTrans = lookAt (V3 0  0  0)
                            initV
                            (V3 0  1  0) :: M44 GLfloat
 
-    Uniform progId' "view"  $= viewTrans
+    Uniform progId "view"  $= viewTrans
 
     -- render the sky
     glDepthMask (fromBool False)
