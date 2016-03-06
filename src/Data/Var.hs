@@ -26,13 +26,13 @@ instance (MonadIO m, Storable a) => HasGetter m (Ptr a) a where
 class Monad m => HasSetter m s a | s -> a where
     ($=) :: s -> a -> m ()
     put  :: s -> a -> m ()
-    put = ($=)
+    put = ($=!)
     ($=!) :: s -> a -> m ()
     s $=! a = a `seq` (s $= a)
 
 instance (MonadIO m, MonadReader e m, HasSetter m g a) => HasSetter m (e -> g) a where
     s $= a
-        = asks s >>= ($= a)
+        = asks s >>= ($=! a)
 
 instance MonadIO m => HasSetter m (IORef a) a where
     ($=) = (.) liftIO . writeIORef
@@ -45,7 +45,7 @@ instance (MonadIO m, Storable a) => HasSetter m (Ptr a) a where
 ($~) :: (HasGetter m t a, HasSetter m t a) => t -> (a -> a) -> m ()
 ($~) a f = do
     e <- get a
-    a $= f e
+    a $=! f e
 
 -- Add
 (+=) :: (Num a, HasGetter m t a, HasSetter m t a)  => t -> a -> m ()
