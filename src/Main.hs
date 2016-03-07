@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 module Main where
 import           Control.Monad
 import           Control.Monad.Reader
@@ -42,6 +43,8 @@ import qualified Game.Waddle          as WAD
 width :: Int
 height :: Int
 (width, height) = (1280, 1024)
+
+type KeyMap = [(Key, Game ())]
 
 twoSidedLineDef :: WAD.LineDef -> Bool
 twoSidedLineDef WAD.LineDef{..}
@@ -193,11 +196,11 @@ main = do
                            <*> pistolWeapon wad palette'
                            <*> newIORef 0
                            <*> newIORef 0
-    mainLoop (\w -> runGame (loop w) initState)
+    mainLoop (\w -> runGame (loop w (setMapping w)) initState)
 
 pistolWeapon :: WAD.Wad -> ColorPalette -> IO RenderData
 pistolWeapon wad palette = do
-    wepProgram@(Program wepProgId) <- mkProgram spriteVert spriteFrag
+    wepProgram <- mkProgram spriteVert spriteFrag
 
     vaoId <- withNewPtr (glGenVertexArrays 1)
     glBindVertexArray vaoId
@@ -277,28 +280,26 @@ getTextureId wad name = do
       glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) tW tH 0 GL_RGBA GL_FLOAT
     return texId
 
-loop :: Window -> Game ()
-loop w = do
+loop :: Window -> KeyMap -> Game ()
+loop w mapping = do
     -- TODO: this is not very nice...
-    ticks' <- asks ticks
-    liftIO $ modifyIORef' ticks' (+ 1)
-    rot'    <- get rot
+    ticks += 1
+    rot' <- get rot
     (V3 px pz py) <- get player
     let ax     = axisAngle (V3 0 1 0) rot'
         modelM = mkTransformationMat identity (V3 px (-pz) (-py))
         lookM  = mkTransformation ax (V3 0 0 0)
         (V4 x1 y1 z1 _)  = lookM !* V4 0 0 1 1
         initV = V3 x1 y1 z1
-        move  = V3 (-x1) y1 z1
 
     gameLogic
-    updateView w initV modelM
-    keyEvents w move
+    updateView initV modelM
+    keyEvents w mapping
 
 
 
-updateView :: Window -> V3 GLfloat -> M44 GLfloat -> Game ()
-updateView w initV modelM = do
+updateView :: V3 GLfloat -> M44 GLfloat -> Game ()
+updateView initV modelM = do
     -- TODO: most of this stuff shouldn't be set on each update
     glEnable GL_CULL_FACE
     glFrontFace GL_CW
@@ -346,8 +347,8 @@ updateView w initV modelM = do
 
     -- TODO: can be optimized to only bind program once...
     sprites' <- asks sprites
-    forM_ sprites' $ \sprite -> do
-      bindRenderData (spriteRenderData sprite)
+    forM_ sprites' $ \Sprite{..} -> do
+      bindRenderData spriteRenderData
       glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 
     -- render wep
@@ -375,56 +376,81 @@ multAndProject m v =
 applyShot :: Game ()
 applyShot = return ()
 
-keyEvents :: Window -> V3 GLfloat -> Game ()
-keyEvents w move = do
-    keyP <- liftIO $ getKey w Key'Space
-    when (keyP == KeyState'Pressed) $ do
-      ticks' <- asks ticks
-      ticks'' <- liftIO $ readIORef ticks'
-      lastShot' <- asks lastShot
-      liftIO $ writeIORef lastShot' ticks''
-      applyShot
+-- TODO: no need to recalculate every time, only when rotating
+moveVector :: Game (V3 GLfloat)
+moveVector = do
+    rot' <- get rot
+    let ax     = axisAngle (V3 0 1 0) rot'
+        lookM  = mkTransformation ax (V3 0 0 0)
+        (V4 x1 y1 z1 _)  = lookM !* V4 0 0 1 1
+        move  = V3 (-x1) y1 z1
+    return move
 
-    keyW <- liftIO $ getKey w Key'W
-    when (keyW == KeyState'Pressed) $ do
-        let moveM = mkTransformationMat identity move
-        player $~ multAndProject moveM
+keyEvents :: Window -> KeyMap -> Game ()
+keyEvents w mapping = do
+    forM_ mapping $ \(key, action) -> do
+        k <- liftIO $ getKey w key
+        when (k == KeyState'Pressed) action
 
-    keyS <- liftIO $ getKey w Key'S
-    when (keyS == KeyState'Pressed) $ do
-        let moveM = mkTransformationMat identity (-move)
-        player $~ multAndProject moveM
+    return ()
 
-    keyUp <- liftIO $ getKey w Key'Up
-    when (keyUp == KeyState'Pressed) $ do
-        let moveM = mkTransformationMat identity (V3 0 0.2 0)
-        player $~ multAndProject moveM
+setMapping :: Window -> KeyMap
+setMapping w
+    = [ (Key'Space,  shoot)
+      , (Key'W,      moveForward)
+      , (Key'S,      moveBackwards)
+      , (Key'D,      turnRight)
+      , (Key'A,      turnLeft)
+      , (Key'Up,     moveUp)
+      , (Key'Down,   moveDown)
+      , (Key'Left,   moveLeft)
+      , (Key'Right,  moveRight)
+      , (Key'Escape, quit w)
+      ]
 
-    keyDown <- liftIO $ getKey w Key'Down
-    when (keyDown == KeyState'Pressed) $ do
-        let moveM = mkTransformationMat identity (V3 0 (-0.2) 0)
-        player $~ multAndProject moveM
+-- Actions
+quit :: Window -> Game ()
+quit w = liftIO $ setWindowShouldClose w True
 
-    keyRight <- liftIO $ getKey w Key'Right
-    when (keyRight == KeyState'Pressed) $ do
-        let (V3 v1 v2 v3) = move
-        let moveM = mkTransformationMat identity (V3 v3 v2 (-v1))
-        player $~ multAndProject moveM
+moveBy :: V3 GLfloat -> Game ()
+moveBy by = do
+    let moveM = mkTransformationMat identity by
+    player $~ multAndProject moveM
 
-    keyLeft <- liftIO $ getKey w Key'Left
-    when (keyLeft == KeyState'Pressed) $ do
-        let (V3 v1 v2 v3) = move
-        let moveM = mkTransformationMat identity (V3 (-v3) v2 v1)
-        player $~ multAndProject moveM
+shoot :: Game ()
+shoot = do
+    ticks' <- get ticks
+    lastShot $= ticks'
+    applyShot
 
+moveLeft :: Game ()
+moveLeft = do
+    (V3 v1 v2 v3) <- moveVector
+    moveBy (V3 (-v3) v2 v1)
 
-    keyD <- liftIO $ getKey w Key'D
-    when (keyD == KeyState'Pressed) $ rot -= 0.05
+moveRight :: Game ()
+moveRight = do
+    (V3 v1 v2 v3) <- moveVector
+    moveBy (V3 v3 v2 (-v1))
 
-    keyA <- liftIO $ getKey w Key'A
-    when (keyA == KeyState'Pressed) $ rot += 0.05
+moveDown :: Game ()
+moveDown
+    = moveBy (V3 0 (-0.2) 0)
 
-    liftIO $ do
-        state <- getKey w Key'Escape
-        when (state == KeyState'Pressed) $
-            setWindowShouldClose w True
+moveUp :: Game ()
+moveUp
+    = moveBy (V3 0 0.2 0)
+
+moveForward :: Game ()
+moveForward
+    = join $ moveBy <$> moveVector
+
+moveBackwards :: Game ()
+moveBackwards
+    = join $ moveBy . negate <$> moveVector
+
+turnLeft :: Game ()
+turnLeft = rot += 0.05
+
+turnRight :: Game ()
+turnRight = rot -= 0.05
