@@ -94,8 +94,8 @@ def :: forall n i o u t. ShowType (FromArg t) => LiftVar n i o u t
 def _ = imp (Definition (Define e) e)
     where e = fromExpression $ Var $ symbolVal (Proxy :: Proxy n) :: FromArg t
 
-float :: Applicative f => Double -> f Exp
-float = pure . Scalar
+float :: Applicative f => Double -> f Scalar
+float = pure . Scalar . EScalar
 
 -- Bilinear maps
 class (Expression a, Expression b, Expression c) => Bilinear a b c | a b -> c where
@@ -118,12 +118,12 @@ class Indexable a where
     indexAt :: a -> Int -> TypeAtIndex a
 
 instance (KnownNat a, KnownNat b) => Indexable (Mat a b) where
-    type TypeAtIndex (Mat a b) = Vec a
+    type TypeAtIndex (Mat a b) = Vec b
     indexAt mat i = Vec (EIndex mat i)
 
 instance KnownNat d => Indexable (Vec d) where
-    type TypeAtIndex (Vec d) = Exp
-    indexAt = EIndex
+    type TypeAtIndex (Vec d) = Scalar
+    indexAt = (.) Scalar . EIndex
 
 _0 :: (Indexable a, 1 <= Size a) => a -> TypeAtIndex a
 _0 a = indexAt a 0
@@ -160,8 +160,8 @@ instance (KnownNat r, KnownNat c) => Semigroup (Mat r c)
 class (KnownNat (Size a)) => Vectorable a where
     fromVectorable :: (Size a ~ n) => a -> Vec n
 
-instance Vectorable Exp where
-    fromVectorable = Vec
+instance Vectorable Scalar where
+    fromVectorable (Scalar p) = Vec p
 
 instance KnownNat n => Vectorable (Vec n) where
     fromVectorable = id
@@ -169,7 +169,7 @@ instance KnownNat n => Vectorable (Vec n) where
 type family Size v where
     Size (Mat a b) = a
     Size (Vec n)   = n
-    Size Exp       = 1
+    Size Scalar      = 1
 
 class Combinable a b where
     type Combined a b
@@ -188,11 +188,8 @@ class Assignable a where
     (=:) :: Shader v i o u a -> Shader v i o u a -> Shader v i o u ()
     (=:) a b = join $ liftA2 (=::) a b
 
-instance KnownNat n => Assignable (Vec n) where
-    (Vec v) =:: val = imp $ Assignment (Assign v val) ()
-
-instance (KnownNat r, KnownNat c) => Assignable (Mat r c) where
-    (Mat v) =:: val = imp $ Assignment (Assign v val) ()
+instance Expression a => Assignable a where
+    v =:: val = imp $ Assignment (Assign (toExpression v) val) ()
 
 texture :: (KnownNat n, Applicative f) => f (Sampler m) -> f (Vec n) -> f (Vec 4)
 texture = liftA2 func

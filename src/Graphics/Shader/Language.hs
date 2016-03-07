@@ -13,7 +13,7 @@ import Data.Proxy
 
 data Exp
     = Var String
-    | Scalar Double
+    | EScalar Double
     | forall t. Expression t => EIndex t Int
     | forall t1 t2. (Expression t1, Expression t2) => Combine t1 t2
     | forall t. (Expression t) => Wrap t
@@ -31,7 +31,7 @@ instance Num Exp where
     (+) = Add
     abs = Abs
     signum = Signum
-    fromInteger = Scalar . fromInteger
+    fromInteger = EScalar . fromInteger
     negate (Negate n) = n
     negate n = Negate n
 
@@ -62,7 +62,7 @@ instance Show Exp where
         = show e1 ++ " = " ++ show e2
     show (Define e)
         = showType e ++ " " ++ show e
-    show (Scalar s)
+    show (EScalar s)
         = show s
     show (Abs e)
         = "abs(" ++ show e ++ ")"
@@ -77,6 +77,17 @@ class Show a => Expression a where
 
 class ShowType a where
     showType :: a -> String
+
+data Scalar
+    = Scalar Exp
+
+instance ShowType Scalar where
+    showType _
+        = "float"
+
+instance Show Scalar where
+    show (Scalar e)
+        = show e
 
 data Vec (dim :: Nat)
     = Vec Exp
@@ -115,6 +126,10 @@ instance (KnownNat r, KnownNat c) => Show (Mat r c) where
 data Sampler (d :: Nat)
     = Sampler Exp
     deriving Show
+
+instance Expression Scalar where
+    fromExpression = Scalar
+    toExpression (Scalar p) = p
 
 instance (Show (Vec d), KnownNat d) => Expression (Vec d) where
     fromExpression = Vec

@@ -72,8 +72,20 @@ textureFrag
 
 spriteVert :: Shader 150 '[Pos3, Tex2] '[Texcoord] '[Model, View, Proj] ()
 spriteVert = do
+    let tmpMv = SVar :: SVar ('Arg "tmp" 'Mat4)
+
+    def tmpMv =: uni view *: uni model
+
+    var tmpMv `at` _0 `at` _0 =: float 1
+    var tmpMv `at` _0 `at` _1 =: float 0
+    var tmpMv `at` _0 `at` _2 =: float 0
+
+    var tmpMv `at` _2 `at` _0 =: float 0
+    var tmpMv `at` _2 `at` _1 =: float 0
+    var tmpMv `at` _2 `at` _2 =: float 1
+
     out texcoord =: inp tex2
-    var glPos =: (uni proj *: uni view *: uni model *: (inp pos3 &: float 1))
+    var glPos =: (uni proj *: var tmpMv *: (inp pos3 &: float 1))
 
 staticVert :: Shader 150 '[Pos3, Tex2] '[Texcoord] '[] ()
 staticVert = do
