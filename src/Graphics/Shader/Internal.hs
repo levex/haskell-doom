@@ -21,6 +21,7 @@ import Control.Applicative
 
 data ExpFunctor a
     = Assignment Exp a
+    | Definition Exp a
     deriving Functor
 
 newtype Shader (ver :: Nat) (i :: [Arg]) (o :: [Arg]) (u :: [Arg]) a
@@ -32,6 +33,8 @@ class (Functor f) => Print f where
 
 instance Print ExpFunctor where
     execPrint (Assignment expr cont)
+        = tell [show expr ++ ";"] >> cont
+    execPrint (Definition expr cont)
         = tell [show expr ++ ";"] >> cont
 
 -- Fold the free monad
@@ -85,6 +88,12 @@ var :: forall n i o u t. LiftVar n i o u t
 var _ = pure $ fromExpression (Var name)
     where name = symbolVal (Proxy :: Proxy n)
 
+-- TODO: automatically define variables as they are used
+--       or rely on the type checker to catch undefined variable usage
+def :: forall n i o u t. ShowType (FromArg t) => LiftVar n i o u t
+def _ = imp (Definition (Define e) e)
+    where e = fromExpression $ Var $ symbolVal (Proxy :: Proxy n) :: FromArg t
+
 float :: Applicative f => Double -> f Exp
 float = pure . Scalar
 
@@ -103,6 +112,36 @@ instance (KnownNat a, KnownNat b, KnownNat c) =>
          Bilinear (Mat a b) (Mat b c) (Mat a c)
 
 instance (KnownNat a, KnownNat b) => Bilinear (Mat a b) (Vec b) (Vec b)
+
+class Indexable a where
+    type TypeAtIndex a
+    indexAt :: a -> Int -> TypeAtIndex a
+
+instance (KnownNat a, KnownNat b) => Indexable (Mat a b) where
+    type TypeAtIndex (Mat a b) = Vec a
+    indexAt mat i = Vec (EIndex mat i)
+
+instance KnownNat d => Indexable (Vec d) where
+    type TypeAtIndex (Vec d) = Exp
+    indexAt = EIndex
+
+_0 :: (Indexable a, 1 <= Size a) => a -> TypeAtIndex a
+_0 a = indexAt a 0
+
+_1 :: (Indexable a, 2 <= Size a) => a -> TypeAtIndex a
+_1 a = indexAt a 1
+
+_2 :: (Indexable a, 3 <= Size a) => a -> TypeAtIndex a
+_2 a = indexAt a 2
+
+_3 :: (Indexable a, 4 <= Size a) => a -> TypeAtIndex a
+_3 a = indexAt a 3
+
+_4 :: (Indexable a, 5 <= Size a) => a -> TypeAtIndex a
+_4 a = indexAt a 4
+
+at :: Functor f => f a -> (a -> b) -> f b
+at = flip (<$>)
 
 -- Semigroups
 class Expression a => Semigroup a where
@@ -128,8 +167,9 @@ instance KnownNat n => Vectorable (Vec n) where
     fromVectorable = id
 
 type family Size v where
-    Size (Vec n) = n
-    Size Exp     = 1
+    Size (Mat a b) = a
+    Size (Vec n)   = n
+    Size Exp       = 1
 
 class Combinable a b where
     type Combined a b

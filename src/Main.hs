@@ -83,7 +83,7 @@ main = do
                      (elems :: Ptr GLuint)
                      GL_STATIC_DRAW
 
-    program@(Program progId) <- mkProgram wallVert wallFrag
+    program@(Program progId) <- mkProgram wallVert textureFrag
 
     FragShaderLocation progId "outColor" $= FragDiffuseColor
     Uniform program proj $= projTrans
@@ -180,6 +180,8 @@ main = do
                                , rdVao  = floorVertexArrayId
                                , rdExtra = 0
                                }
+
+    --spriteProg <- mkProgram spriteVert textureFrag
     sprites <- createLevelThings wad program (WAD.levelThings level)
     let palette' = loadPalettes wad
     initState <- GameState <$> return program
@@ -200,7 +202,7 @@ main = do
 
 pistolWeapon :: WAD.Wad -> ColorPalette -> IO RenderData
 pistolWeapon wad palette = do
-    wepProgram <- mkProgram spriteVert spriteFrag
+    wepProgram <- mkProgram staticVert textureFrag
 
     vaoId <- withNewPtr (glGenVertexArrays 1)
     glBindVertexArray vaoId
@@ -387,12 +389,10 @@ moveVector = do
     return move
 
 keyEvents :: Window -> KeyMap -> Game ()
-keyEvents w mapping = do
-    forM_ mapping $ \(key, action) -> do
+keyEvents w mapping
+    = forM_ mapping $ \(key, action) -> do
         k <- liftIO $ getKey w key
         when (k == KeyState'Pressed) action
-
-    return ()
 
 setMapping :: Window -> KeyMap
 setMapping w

@@ -8,12 +8,12 @@ module Graphics.Shader
     , T.GLTypeable(..)
     , T.TypeInfo(..)
     , I.Union
-    , wallFrag
+    , textureFrag
     , wallVert
-    , spriteFrag
     , spriteVert
     , floorFrag
     , floorVert
+    , staticVert
     , glslTypeSize
     , Pos3
     , model
@@ -66,18 +66,19 @@ wallVert = do
     out texcoord =: inp tex2
     var glPos =: (uni proj *: uni view *: uni model *: (inp pos3 &: float 1))
 
-wallFrag :: Shader 150 '[Texcoord] '[Outcolor] '[TexSampler] ()
-wallFrag
+textureFrag :: Shader 150 '[Texcoord] '[Outcolor] '[TexSampler] ()
+textureFrag
     = out outcolor =: texture (uni texSampler) (inp texcoord)
 
-spriteVert :: Shader 150 '[Pos3, Tex2] '[Texcoord] '[] ()
+spriteVert :: Shader 150 '[Pos3, Tex2] '[Texcoord] '[Model, View, Proj] ()
 spriteVert = do
     out texcoord =: inp tex2
-    var glPos    =: inp pos3 &: float 1.0
+    var glPos =: (uni proj *: uni view *: uni model *: (inp pos3 &: float 1))
 
--- TODO: the sprite shader shouldn't be the same as wall shader
-spriteFrag :: Shader 150 '[Texcoord] '[Outcolor] '[TexSampler] ()
-spriteFrag = wallFrag
+staticVert :: Shader 150 '[Pos3, Tex2] '[Texcoord] '[] ()
+staticVert = do
+    out texcoord =: inp tex2
+    var glPos    =: inp pos3 &: float 1.0
 
 floorVert :: Shader 150 '[Pos3] '[] '[Model, View, Proj] ()
 floorVert

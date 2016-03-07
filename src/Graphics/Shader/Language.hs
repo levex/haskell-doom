@@ -14,6 +14,7 @@ import Data.Proxy
 data Exp
     = Var String
     | Scalar Double
+    | forall t. Expression t => EIndex t Int
     | forall t1 t2. (Expression t1, Expression t2) => Combine t1 t2
     | forall t. (Expression t) => Wrap t
     | FuncApp String [Exp]
@@ -23,6 +24,7 @@ data Exp
     | Abs Exp
     | Signum Exp
     | forall t. (Expression t) => Assign Exp t
+    | forall t. (Expression t, ShowType t) => Define t
 
 instance Num Exp where
     (*) = Mul
@@ -36,6 +38,8 @@ instance Num Exp where
 instance Show Exp where
     show (Var name)
         = name
+    show (EIndex e i)
+        = show e ++ "[" ++ show i ++ "]"
     show (Combine e1 e2)
         = e1s ++ ", " ++ e2s
         where e1s = case toExpression e1 of
@@ -56,6 +60,8 @@ instance Show Exp where
         = show e1 ++ " + " ++ show e2
     show (Assign e1 e2)
         = show e1 ++ " = " ++ show e2
+    show (Define e)
+        = showType e ++ " " ++ show e
     show (Scalar s)
         = show s
     show (Abs e)
@@ -69,30 +75,42 @@ class Show a => Expression a where
     fromExpression :: Exp -> a
     toExpression :: a -> Exp
 
+class ShowType a where
+    showType :: a -> String
+
 data Vec (dim :: Nat)
     = Vec Exp
 
+instance (KnownNat n) => ShowType (Vec n) where
+    showType (Vec _)
+        = "vec" ++ dim
+        where dim = show $ natVal (Proxy :: Proxy n)
+
 instance KnownNat n => Show (Vec n) where
-    show (Vec expr)
+    show vec@(Vec expr)
         = case expr of
             expr'@Combine{} -> w expr'
             _               -> show expr
         where dim = natVal (Proxy :: Proxy n)
               w e = case dim of
                       1 -> show e
-                      k -> "vec" ++ show k ++ "(" ++ show e ++ ")"
+                      _ -> showType vec ++ "(" ++ show e ++ ")"
 
 data Mat (rows :: Nat) (cols :: Nat)
     = Mat Exp
 
+instance (KnownNat r, KnownNat c) => ShowType (Mat r c) where
+    showType (Mat _)
+        = "mat" ++ rdim ++ "x" ++ cdim
+        where rdim = show $ natVal (Proxy :: Proxy r)
+              cdim = show $ natVal (Proxy :: Proxy r)
+
 instance (KnownNat r, KnownNat c) => Show (Mat r c) where
-    show (Mat expr)
+    show mat@(Mat expr)
         = case expr of
             expr'@Combine{} -> w expr'
             _               -> show expr
-        where rdim = show $ natVal (Proxy :: Proxy r)
-              cdim = show $ natVal (Proxy :: Proxy r)
-              w e  = "mat" ++ rdim ++ "x" ++ cdim ++ "(" ++ show e ++ ")"
+        where w e  = showType mat ++ "(" ++ show e ++ ")"
 
 data Sampler (d :: Nat)
     = Sampler Exp
