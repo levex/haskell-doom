@@ -32,7 +32,8 @@ bindVertexData (Program progId) (Bindable bdata) = liftIO $ do
                      (vertices :: Ptr a)
                      GL_STATIC_DRAW
     foldM_ (\offset (name, size) -> do
-            attrib <- get $ AttribLocation progId name
+            attrib <- fromIntegral <$>
+                        withCString name (glGetAttribLocation progId)
             glEnableVertexAttribArray attrib
             glVertexAttribPointer attrib
                                   size
@@ -46,13 +47,6 @@ bindVertexData (Program progId) (Bindable bdata) = liftIO $ do
           totalSize = fromIntegral $ sum . map (glslTypeSize . snd) $ extracted
           dataSize  = sizeOf proxy
           proxy   = undefined :: a
-
--- Attribute location
-data AttribLocation a = AttribLocation ProgId String
-
-instance (MonadIO m, Num a) => HasGetter m (AttribLocation a) a where
-    get (AttribLocation progId name) = liftIO $
-        fromIntegral <$> withCString name (glGetAttribLocation progId)
 
 -- Uniform binding
 data Uniform u (v :: Arg) a = forall i proxy. Uniform (Program u i) (proxy v)

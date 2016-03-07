@@ -291,8 +291,6 @@ loop w = do
         initV = V3 x1 y1 z1
         move  = V3 (-x1) y1 z1
 
-    levelRd' <- asks levelRd
-
     gameLogic
     updateView w initV modelM
     keyEvents w move
