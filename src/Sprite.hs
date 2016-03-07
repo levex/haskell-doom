@@ -55,8 +55,8 @@ loadSprite sprite = do
   getElems pxArr
 
 createLevelThings :: TypeInfo u => WAD.Wad -> Program u i -> [WAD.Thing] -> IO [Sprite]
-createLevelThings wad progId things
-  = forM notReserved (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad progId (thingToSprite $ WAD.thingType t))
+createLevelThings wad prog things
+  = forM notReserved (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad prog (thingToSprite $ WAD.thingType t))
     where
       notReserved = filter (\t -> thingTypeToInt (WAD.thingType t) `notElem` reservedSpriteIds) things
       pW = 3 -- fixME, ugly
@@ -90,7 +90,7 @@ findSpriteName wad name
         nb = chr $ ord b + 1
 
 makeSprite' :: (TypeInfo u) => [GLfloat] -> [GLuint] -> Maybe WAD.Thing -> WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
-makeSprite' vbo ebo thing wad program@(Program progId) spriteName' = do
+makeSprite' vbo ebo thing wad program spriteName' = do
   let spriteName = if (length (BS.unpack spriteName') == 4) then
                     findSpriteName wad spriteName'
                    else
@@ -134,7 +134,7 @@ makeSprite' vbo ebo thing wad program@(Program progId) spriteName' = do
                        rdVao = vaoId
                      , rdVbo = vboId
                      , rdTex = texId
-                     , rdProg = progId
+                     , rdProg = program
                      , rdEbo = eboId
                      }
 

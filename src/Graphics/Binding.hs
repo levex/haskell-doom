@@ -55,10 +55,10 @@ instance (MonadIO m, Num a) => HasGetter m (AttribLocation a) a where
         fromIntegral <$> withCString name (glGetAttribLocation progId)
 
 -- Uniform binding
-data Uniform a = Uniform ProgId String
+data Uniform a = forall u i. Uniform (Program u i) String
 
 instance (MonadIO m, HasBinder a) => HasSetter m (Uniform a) a where
-    (Uniform progId name) $= uniData = liftIO $ do
+    (Uniform (Program progId) name) $= uniData = liftIO $ do
         uniId <- withCString name $ glGetUniformLocation progId
         bindUniform uniData (fromIntegral uniId) 1
 

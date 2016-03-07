@@ -16,6 +16,9 @@ module Graphics.Shader
     , floorVert
     , glslTypeSize
     , Pos3
+    , model
+    , view
+    , proj
     , Tex2) where
 import Graphics.Shader.Internal as I
 import Graphics.Shader.Types as T

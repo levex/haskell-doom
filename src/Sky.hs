@@ -14,8 +14,7 @@ import Render
 fillSkyTextureData :: WAD.Wad -> IO RenderData
 fillSkyTextureData wad = do
     -- TODO: figure out which SKY texture
-    skyProgram@(Program skyProgId) <- mkProgram spriteVert spriteFrag
-    glUseProgram skyProgId
+    skyProgram <- mkProgram spriteVert spriteFrag
 
     vaoId <- withNewPtr (glGenVertexArrays 1)
     glBindVertexArray vaoId
@@ -49,7 +48,7 @@ fillSkyTextureData wad = do
                           rdEbo = eboId,
                           rdTex = texId,
                           rdVao = vaoId,
-                          rdProg = skyProgId}
+                          rdProg = skyProgram}
     where
       vbo = [-1.0,  1.0, 0.0,  0.0, 0.0,
               1.0,  1.0, 0.0,  1.0, 0.0,

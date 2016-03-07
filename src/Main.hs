@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE Rank2Types #-}
 module Main where
 import           Control.Monad
@@ -82,7 +83,7 @@ main = do
     program@(Program progId) <- mkProgram wallVert wallFrag
 
     FragShaderLocation progId "outColor" $= FragDiffuseColor
-    Uniform progId "proj" $= projTrans
+    Uniform program "proj" $= projTrans
 
     levelRData <- forM (M.toList textToVert) $ \(texName, verts) -> do
         vertexBufferId <- withNewPtr (glGenBuffers 1)
@@ -99,7 +100,7 @@ main = do
                   rdVbo  = vertexBufferId
                 , rdEbo  = elementBufferId
                 , rdTex  = texId
-                , rdProg = progId
+                , rdProg = program
                 , rdVao  = vertexArrayId
                 , rdExtra = 0
             }
@@ -152,7 +153,7 @@ main = do
     floorProgram@(Program floorProgId) <- mkProgram floorVert floorFrag
 
     FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
-    Uniform floorProgId "proj" $= projTrans
+    Uniform floorProgram "proj" $= projTrans
 
     bindVertexData floorProgram (Bindable floorVertexBufferData)
 
@@ -166,13 +167,13 @@ main = do
     --let levelData = RenderData { rdVbo  = vertexBufferId
     --                           , rdEbo  = elementBufferId
     --                           , rdTex  = texId
-    --                           , rdProg = progId
+    --                           , rdProg = program
     --                           , rdVao  = vertexArrayId
     --                           }
     let floorRData = RenderData { rdVbo  = floorVertexBufferId
                                , rdEbo  = 0
                                , rdTex  = 0
-                               , rdProg = floorProgId
+                               , rdProg = floorProgram
                                , rdVao  = floorVertexArrayId
                                , rdExtra = 0
                                }
@@ -260,7 +261,7 @@ pistolWeapon wad palette = do
                          rdTex = stillTexId,
                          rdExtra = firingTexId,
                          rdVao = vaoId,
-                         rdProg = wepProgId}
+                         rdProg = wepProgram}
 
 getTextureId :: WAD.Wad -> WAD.LumpName -> IO GLuint
 getTextureId wad name = do
@@ -310,13 +311,13 @@ updateView w initV modelM = do
     prog'@(Program progId) <- asks prog
     glUseProgram progId
 
-    Uniform progId "model" $= modelM
+    Uniform prog' "model" $= modelM
 
     let viewTrans = lookAt (V3 0  0  0)
                            initV
                            (V3 0  1  0) :: M44 GLfloat
 
-    Uniform progId "view"  $= viewTrans
+    Uniform prog' "view"  $= viewTrans
 
     -- render the sky
     glDepthMask (fromBool False)
@@ -335,16 +336,15 @@ updateView w initV modelM = do
       glBindVertexArray (rdVao level)
       glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
 
-    floorRd' <- asks floorRd
-    let floorProgId = rdProg floorRd'
+    floorRd'@RenderData{rdProg} <- asks floorRd
     bindRenderData floorRd'
     --glPolygonMode GL_FRONT_AND_BACK GL_LINE
     glLineWidth 1
     glDrawArrays GL_TRIANGLES 0 50000 -- TODO: need actual number
     glPolygonMode GL_FRONT_AND_BACK GL_FILL
 
-    Uniform floorProgId "model" $= modelM
-    Uniform floorProgId "view"  $= viewTrans
+    Uniform rdProg "model" $= modelM
+    Uniform rdProg "view"  $= viewTrans
 
     -- TODO: can be optimized to only bind program once...
     sprites' <- asks sprites
