@@ -29,7 +29,6 @@ import           Linear
 import           Sky
 import           Sprite
 import           TextureLoader
-import           Triangulation
 import           Types
 import           Data.Var
 import           Window
@@ -180,7 +179,6 @@ main = do
     sprites <- createLevelThings wad program (WAD.levelThings level)
     let palette' = loadPalettes wad
     initState <- GameState <$> return program
-                           <*> return wad
                            <*> return sideDefCount
                            <*> pure levelRData
                            <*> pure floorRData
@@ -373,7 +371,7 @@ extendToV4 (V3 x z y) = V4 x z y 1
 
 multAndProject :: M44 GLfloat -> V3 GLfloat -> V3 GLfloat
 multAndProject m v =
-  let (V4 x y z _) = m !* (extendToV4 v)
+  let (V4 x y z _) = m !* extendToV4 v
   in V3 x y z
 
 applyShot :: Game ()

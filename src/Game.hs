@@ -7,7 +7,6 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 -- ugly
 import           Data.Word
-import qualified Game.Waddle          as WAD
 import           Level.Sector
 import           Graphics.Program
 import           Graphics.GL.Core33
@@ -22,7 +21,6 @@ newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
 
 data GameState u i = GameState {
         prog          :: Program u i
-      , wad           :: WAD.Wad
       , sideDefs      :: Int
       , levelRd       :: [RenderData]
       , floorRd       :: RenderData

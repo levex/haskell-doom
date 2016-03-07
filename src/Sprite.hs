@@ -49,18 +49,16 @@ loadSprite sprite = do
     forM_ col $ \post -> do
       let tx = x
       forM_ (zip [0..] (BS.unpack $ WAD.postPixels post)) $ \(i, pt) -> do
-        let ty = (fromIntegral $ WAD.postTop post) + i
+        let ty = fromIntegral (WAD.postTop post) + i
         when (tx <= fW - 1 && ty <= fH - 1 && tx >= 0 && ty >= 0) $
           writeArray pxArr (tx + ty * fW) pt
   getElems pxArr
 
 createLevelThings :: TypeInfo u => WAD.Wad -> Program u i -> [WAD.Thing] -> IO [Sprite]
 createLevelThings wad progId things
-  = mapM (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad progId (thingToSprite $ WAD.thingType t))
-        (filter (\t ->
-            notElem (thingTypeToInt $ WAD.thingType t) reservedSpriteIds)
-        things)
+  = forM notReserved (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad progId (thingToSprite $ WAD.thingType t))
     where
+      notReserved = filter (\t -> thingTypeToInt (WAD.thingType t) `notElem` reservedSpriteIds) things
       pW = 3 -- fixME, ugly
       pH = 3 -- fixME, ugly
       tx t = fromIntegral (WAD.thingX t) / scale
@@ -80,16 +78,16 @@ makeSprite
 
 findSpriteName :: WAD.Wad -> WAD.LumpName -> WAD.LumpName
 findSpriteName wad name
-  = findSpriteName' wad name "A" "0"
+  = findSpriteName' "A" "0"
   where
-    findSpriteName' wad name f@(a : as) g@(b : bs)
-      | isNothing p = findSpriteName' wad name (na : as) (nb : bs)
+    findSpriteName' f@(a : as) g@(b : bs)
+      | isNothing p = findSpriteName' (na : as) (nb : bs)
       | otherwise   = t
       where
         p = M.lookup (mk t) (WAD.wadSprites wad)
         t = BS.append (BS.append name (BSC.pack f)) (BSC.pack g)
-        na = chr ((ord a) + 1)
-        nb = chr ((ord b) + 1)
+        na = chr $ ord a + 1
+        nb = chr $ ord b + 1
 
 makeSprite' :: (TypeInfo u) => [GLfloat] -> [GLuint] -> Maybe WAD.Thing -> WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
 makeSprite' vbo ebo thing wad program@(Program progId) spriteName' = do
@@ -115,7 +113,7 @@ makeSprite' vbo ebo thing wad program@(Program progId) spriteName' = do
                     GL_STATIC_DRAW
 
   -- load sprite image
-  let sprite = fromMaybe (error ("invalid sprite " ++ (BSC.unpack spriteName)))
+  let sprite = fromMaybe (error ("invalid sprite " ++ BSC.unpack spriteName))
           (M.lookup (mk spriteName) (WAD.wadSprites wad))
   let loadedPalette = loadPalettes wad
   p <- loadSprite sprite
@@ -132,11 +130,13 @@ makeSprite' vbo ebo thing wad program@(Program progId) spriteName' = do
   withArray spritePixels $
     glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) sW sH 0 GL_RGBA GL_FLOAT
 
-  let renderData = RenderData { rdVao = vaoId,
-                     rdVbo = vboId,
-                     rdTex = texId,
-                     rdProg = progId,
-                     rdEbo = eboId}
+  let renderData = RenderData {
+                       rdVao = vaoId
+                     , rdVbo = vboId
+                     , rdTex = texId
+                     , rdProg = progId
+                     , rdEbo = eboId
+                     }
 
   -- TODO: what is this?!
   let v3 = if isNothing thing then

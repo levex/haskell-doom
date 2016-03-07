@@ -1,7 +1,6 @@
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 module SpriteMap where
-import Enemy
+import Enemy ()
 
 import qualified Game.Waddle          as WAD
 import Data.Maybe
