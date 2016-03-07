@@ -9,6 +9,7 @@ import Game
 import TextureLoader
 import Graphics.Binding
 import Graphics.Program
+import Render
 
 fillSkyTextureData :: WAD.Wad -> IO RenderData
 fillSkyTextureData wad = do

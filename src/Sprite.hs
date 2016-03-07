@@ -16,10 +16,10 @@ import           Graphics.Program
 import           Graphics.Shader
 import           Graphics.GL.Core33
 import           Linear
-import           Data.Var
 import           TextureLoader
 import           SpriteMap
 import           Graphics.Binding
+import           Render
 
 testSpriteVbo :: [GLfloat]
 testSpriteVbo = [

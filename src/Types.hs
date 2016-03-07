@@ -9,7 +9,12 @@ import Game.Waddle.Types (ThingType(..))
 
 type Pos = V3 GLfloat
 
-data DType = StartPos Int | DEnemy ThingType | PickUp ThingType | Object ThingType | Unknown
+data DType
+    = StartPos Int
+    | DEnemy ThingType
+    | PickUp ThingType
+    | Object ThingType
+    | Unknown
 
 classifyThingType :: WAD.ThingType -> DType
 classifyThingType c = case c of

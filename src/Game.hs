@@ -8,9 +8,10 @@ import Control.Monad.Reader
 -- ugly
 import           Data.Word
 import qualified Game.Waddle          as WAD
+import           Level.Sector
 import           Graphics.Program
 import           Graphics.GL.Core33
-import           Linear
+import           Render
 import           Data.IORef
 import           Enemy
 import           Types
@@ -37,19 +38,6 @@ data GameState u i = GameState {
       , lastShot      :: IORef Int
     }
 
-data RenderData = RenderData {
-      rdVbo  :: GLuint
-    , rdEbo  :: GLuint
-    , rdVao  :: GLuint
-    , rdTex  :: GLuint
-    , rdProg :: GLuint
-    , rdExtra :: GLuint
-}
-
-
-scale :: GLfloat
-scale = 16
-
 data Sprite = Sprite {
         spriteName       :: String,     -- sprite name in WAD
         spriteActive     :: IORef Bool, -- whether we can start moving
@@ -60,49 +48,10 @@ data Sprite = Sprite {
 
 type ColorPalette = [[(Word8, Word8, Word8)]]
 
--- TODO: put these in another file
-type Vertex2D = V2 GLfloat
-
-data Sector = Sector {
-      --sectorFloorPoints :: [Vertex2D]
-    sectorWalls       :: [Wall]
-    , sectorCeiling     :: GLfloat
-    , sectorFloor       :: GLfloat
-} deriving Show
-
-data Wall = Wall {
-      wallStart   :: Vertex2D
-    , wallEnd     :: Vertex2D
-    , wallSector  :: Sector
-    , portalTo    :: Maybe Sector
-    , lowerTex    :: WAD.LumpName
-    , middleTex   :: WAD.LumpName
-    , upperTex    :: WAD.LumpName
-}
-
--- For floor and ceiling rendering
-data Subsector = Subsector {
-    subsectorFloorPoints :: [Vertex2D]
-} deriving Show
-
-instance Show Wall where
-    show _ = "I'm a wall"
-
-bindRenderData :: MonadIO m => RenderData -> m ()
-bindRenderData rd = do
-  glUseProgram (rdProg rd)
-  glBindVertexArray (rdVao rd)
-  glBindBuffer GL_ELEMENT_ARRAY_BUFFER (rdEbo rd)
-  glBindTexture GL_TEXTURE_2D (rdTex rd)
-
 type Game a = forall u i. GameMonad (GameState u i) a
-
 
 runGame :: GameMonad e a -> e -> IO a
 runGame = runReaderT . unGame
-
-io :: IO a -> GameMonad e a
-io = liftIO
 
 gameLogic :: Game ()
 gameLogic = do
@@ -117,6 +66,3 @@ enemiesLogic =
 
 updateSector :: Game ()
 updateSector = return ()
-
-
-

@@ -9,7 +9,6 @@
 module Main where
 import           Control.Monad
 import           Control.Monad.Reader
-import           Data.Array.IO
 import           Data.CaseInsensitive hiding (map)
 import           Data.Foldable
 import           Data.IORef
@@ -19,6 +18,7 @@ import           Data.Vector.V2
 import           Enemy
 import           Foreign
 import           Game
+import           Level.Sector
 import           Graphics.GL.Core33
 import           Graphics.GLUtils
 import           Graphics.Shader
@@ -33,6 +33,7 @@ import           Triangulation
 import           Types
 import           Data.Var
 import           Window
+import           Render
 import Graphics.Triangulation.Delaunay
 import qualified Data.Map as M
 import qualified Game.Waddle          as WAD
@@ -42,103 +43,21 @@ width :: Int
 height :: Int
 (width, height) = (1280, 1024)
 
-vertexToVect :: WAD.Vertex -> V2 GLfloat
-vertexToVect (WAD.Vertex x y)
-    = V2 (-fromIntegral x / scale) (fromIntegral y / scale)
-
 twoSidedLineDef :: WAD.LineDef -> Bool
 twoSidedLineDef WAD.LineDef{..}
     = isJust lineDefLeftSideDef
-
-arrayFrom :: [a] -> IO (IOArray Int a)
-arrayFrom ls = newListArray (0, length ls) ls
-
--- TODO: terribly inefficient because of the list lookups
-constructSectors :: WAD.Level -> [Sector]
-constructSectors WAD.Level{..}
-    -- acc -> data -> acc
-    = let (result, _)
-            = foldr (\linedef (sectors, res) ->
-                        (insert sectors res linedef, res)
-                    ) (emptySectors, result) levelLineDefs
-       in result
-        where emptySectors =  map (\WAD.Sector{..} -> Sector {
-                                          sectorWalls       = []
-                                        , sectorCeiling     = fromIntegral sectorCeilingHeight / scale
-                                        , sectorFloor       = fromIntegral sectorFloorHeight / scale
-                                    }
-                                 ) levelSectors
-              insert secs result linedef@WAD.LineDef{..}
-                = secs'
-                    where secs' = updateAt secs rightSector (\s -> insertLine s result linedef)
-                          --secs'' = case leftSector of
-                          --          Just justSect -> updateAt secs' justSect (\s -> insertLine s result linedef)
-                          --          Nothing       -> secs'
-                          rightSideDef
-                            = levelSideDefs !! fromIntegral lineDefRightSideDef
-                          leftSideDef
-                            = ((levelSideDefs !!) . fromIntegral) <$> lineDefLeftSideDef
-                          rightSector
-                            = fromIntegral $ WAD.sideDefSector rightSideDef
-                          leftSector
-                            = (fromIntegral . WAD.sideDefSector) <$> leftSideDef
-
-              updateAt :: [Sector] -> Int -> (Sector -> Sector) -> [Sector]
-              updateAt secs at f
-                = let ~(left, a : right) = splitAt at secs
-                   in left ++ [f a] ++ right
-              insertLine :: Sector -> [Sector] -> WAD.LineDef -> Sector
-              insertLine sect@Sector{..} resSecs linedef@WAD.LineDef{..}
-                = sect{
-                        sectorWalls = Wall {
-                                  wallStart   = start
-                                , wallEnd     = end
-                                , wallSector  = resSecs !! rightSector
-                                , portalTo    = (resSecs !!) <$> leftSector
-                                , lowerTex    = WAD.sideDefLowerTextureName rightSideDef
-                                , middleTex   = WAD.sideDefMiddleTextureName rightSideDef
-                                , upperTex    = WAD.sideDefUpperTextureName rightSideDef
-                            } : sectorWalls
-                    }
-                        where rightSideDef
-                                = levelSideDefs !! fromIntegral lineDefRightSideDef
-                              leftSideDef
-                                = ((levelSideDefs !!) . fromIntegral) <$> lineDefLeftSideDef
-                              rightSector
-                                = fromIntegral $ WAD.sideDefSector rightSideDef
-                              leftSector
-                                = (fromIntegral . WAD.sideDefSector) <$> leftSideDef
-                              (start, end)
-                                = lineDefVertices linedef
-              lineDefVertices WAD.LineDef{..}
-                = (getVertex lineDefStartVertex, getVertex lineDefEndVertex)
-              getVertex v
-                = vertexToVect $ levelVertices !! fromIntegral v
-
--- these are evil
-constructSubSectors :: WAD.Level -> [Subsector]
-constructSubSectors WAD.Level{..}
-    = map (Subsector . subsectorPoints) levelSSectors
-        where subsectorPoints :: WAD.SSector -> [Vertex2D]
-              subsectorPoints WAD.SSector{..}
-                = map (\WAD.Seg{..} ->
-                    vertexToVect $ levelVertices !! fromIntegral segStartVertex)
-                    $ take (fromIntegral ssectorSegCount)
-                        . drop (fromIntegral ssectorSegStart)
-                    $ levelSegs
 
 main :: IO ()
 main = do
     mainLoop <- initGL "E1M1" width height
     wad@WAD.Wad{..} <- WAD.load "doom.wad"
     let level@WAD.Level{..} = head $ toList wadLevels
-        levelEnemies  = [mkEnemy t | t <- levelThings, DEnemy e <- [classifyThingType (WAD.thingType t)]]
+        levelEnemies  = [mkEnemy t | t <- levelThings, DEnemy _ <- [classifyThingType (WAD.thingType t)]]
         posThing = head $
             filter (\t -> WAD.thingType t == WAD.Player1StartPos) levelThings
         posX = fromIntegral (WAD.thingX posThing) / scale
         posY = fromIntegral (WAD.thingY posThing) / scale
-        sectors
-             = constructSectors level
+        sectors = extractSectors level
 
     let projTrans = perspective (0.75 :: GLfloat)
                                 (fromIntegral width /
@@ -146,38 +65,8 @@ main = do
                                 1
                                 400
 
-    --sectors  <- arrayFrom levelSectors
-    --sideDefs <- arrayFrom levelSideDefs
-
-    let vertexBufferData' = do
-            sector <- sectors
-            Wall{..}   <- sectorWalls sector
-            let h1 = sectorFloor sector
-                h2 = sectorCeiling sector
-            case portalTo of
-              Just otherSector ->
-                  let h1' = sectorFloor otherSector
-                      h2' = sectorCeiling otherSector
-                   in [ (lowerTex, quad wallStart wallEnd h1' h1)
-                      , (upperTex, quad wallStart wallEnd h2 h2')
-                      ]
-              Nothing ->
-                  return $ (middleTex, quad wallStart wallEnd h2 h1)
-        quad (V2 x y) (V2 x' y') h' h
-            = [ x,  h', y,  0, 0
-              , x', h', y', 1, 0
-              , x,  h,  y,  0, 1
-              , x', h,  y', 1, 1
-              ]
-        textToVert'
-            = M.fromList
-                $ map (\xs@((tex, _) : _) -> (tex, concatMap snd xs))
-                $ groupBy (\(t1, _) (t2, _) -> t1 == t2)
-                $ sortOn fst vertexBufferData'
-        textToVert
-            = M.delete "-" textToVert'
-
-    let dat      = concatMap snd . M.toList $ textToVert
+    let textToVert = textToVertexData sectors
+        dat = concatMap snd . M.toList $ textToVert
         sideDefCount = length dat
         elementBufferData
             = concat $ take sideDefCount $
@@ -393,7 +282,7 @@ loop :: Window -> Game ()
 loop w = do
     -- TODO: this is not very nice...
     ticks' <- asks ticks
-    io $ modifyIORef' ticks' (+ 1)
+    liftIO $ modifyIORef' ticks' (+ 1)
     rot'    <- get rot
     (V3 px pz py) <- get player
     let ax     = axisAngle (V3 0 1 0) rot'
@@ -470,8 +359,8 @@ updateView w initV modelM = do
     bindRenderData weapon
     ticks' <- asks ticks
     lastShot' <- asks lastShot
-    ticks'' <- io $ readIORef ticks'
-    lastShot'' <- io $ readIORef lastShot'
+    ticks'' <- liftIO $ readIORef ticks'
+    lastShot'' <- liftIO $ readIORef lastShot'
     when (ticks'' - lastShot'' <= 25) $
       glBindTexture GL_TEXTURE_2D (rdExtra weapon)
     glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
@@ -492,54 +381,54 @@ applyShot = return ()
 
 keyEvents :: Window -> V3 GLfloat -> Game ()
 keyEvents w move = do
-    keyP <- io $ getKey w Key'Space
+    keyP <- liftIO $ getKey w Key'Space
     when (keyP == KeyState'Pressed) $ do
       ticks' <- asks ticks
-      ticks'' <- io $ readIORef ticks'
+      ticks'' <- liftIO $ readIORef ticks'
       lastShot' <- asks lastShot
-      io $ writeIORef lastShot' ticks''
+      liftIO $ writeIORef lastShot' ticks''
       applyShot
 
-    keyW <- io $ getKey w Key'W
+    keyW <- liftIO $ getKey w Key'W
     when (keyW == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity move
-        player $~ (multAndProject moveM)
+        player $~ multAndProject moveM
 
-    keyS <- io $ getKey w Key'S
+    keyS <- liftIO $ getKey w Key'S
     when (keyS == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity (-move)
-        player $~ (multAndProject moveM)
+        player $~ multAndProject moveM
 
-    keyUp <- io $ getKey w Key'Up
+    keyUp <- liftIO $ getKey w Key'Up
     when (keyUp == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity (V3 0 0.2 0)
-        player $~ (multAndProject moveM)
+        player $~ multAndProject moveM
 
-    keyDown <- io $ getKey w Key'Down
+    keyDown <- liftIO $ getKey w Key'Down
     when (keyDown == KeyState'Pressed) $ do
         let moveM = mkTransformationMat identity (V3 0 (-0.2) 0)
-        player $~ (multAndProject moveM)
+        player $~ multAndProject moveM
 
-    keyRight <- io $ getKey w Key'Right
+    keyRight <- liftIO $ getKey w Key'Right
     when (keyRight == KeyState'Pressed) $ do
         let (V3 v1 v2 v3) = move
         let moveM = mkTransformationMat identity (V3 v3 v2 (-v1))
-        player $~ (multAndProject moveM)
+        player $~ multAndProject moveM
 
-    keyLeft <- io $ getKey w Key'Left
+    keyLeft <- liftIO $ getKey w Key'Left
     when (keyLeft == KeyState'Pressed) $ do
         let (V3 v1 v2 v3) = move
         let moveM = mkTransformationMat identity (V3 (-v3) v2 v1)
-        player $~ (multAndProject moveM)
+        player $~ multAndProject moveM
 
 
-    keyD <- io $ getKey w Key'D
+    keyD <- liftIO $ getKey w Key'D
     when (keyD == KeyState'Pressed) $ rot -= 0.05
 
-    keyA <- io $ getKey w Key'A
+    keyA <- liftIO $ getKey w Key'A
     when (keyA == KeyState'Pressed) $ rot += 0.05
 
-    io $ do
+    liftIO $ do
         state <- getKey w Key'Escape
         when (state == KeyState'Pressed) $
             setWindowShouldClose w True
