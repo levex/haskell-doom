@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module Sprite where
 import           Control.Monad
 import           Data.CaseInsensitive hiding (map)
@@ -14,12 +15,15 @@ import qualified Game.Waddle           as WAD
 import           Graphics.GLUtils
 import           Graphics.Program
 import           Graphics.Shader
+import           Graphics.TupleList
 import           Graphics.GL.Core33
 import           Linear
 import           TextureLoader
 import           SpriteMap
 import           Graphics.Binding
 import           Render
+
+type SpriteArgs = '[Pos3, VertexPos, Tex2]
 
 testSpriteVbo :: [GLfloat]
 testSpriteVbo = [
@@ -54,7 +58,7 @@ loadSprite sprite = do
           writeArray pxArr (tx + ty * fW) pt
   getElems pxArr
 
-createLevelThings :: TypeInfo u => WAD.Wad -> Program u i -> [WAD.Thing] -> IO [Sprite]
+createLevelThings :: WAD.Wad -> Program SpriteArgs i -> [WAD.Thing] -> IO [Sprite]
 createLevelThings wad prog things
   = forM notReserved (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad prog (thingToSprite $ WAD.thingType t))
     where
@@ -63,18 +67,18 @@ createLevelThings wad prog things
       pH = 3 -- fixME, ugly
       tx t = fromIntegral (WAD.thingX t) / scale
       ty t = fromIntegral (WAD.thingY t) / scale
-      mkVbo t = [ - tx t,      pH, ty t,      -pW, 1, 0
-                , - tx t     , pH, ty t     ,  pW, 0, 0
-                , - tx t,      0,  ty t,      -pW, 1, 1
-                , - tx t     , 0,  ty t     ,  pW, 0, 1
+      mkVbo t = [ (V3 (-tx t) pH (ty t), V1 (-pW), V2 1 0)
+                , (V3 (-tx t) pH (ty t), V1    pW, V2 0 0)
+                , (V3 (-tx t) 0  (ty t), V1 (-pW), V2 1 1)
+                , (V3 (-tx t) 0  (ty t), V1    pW, V2 0 1)
                 ]
       mkEbo t = [
         0, 1, 2,
         2, 1, 3]
 
-makeSprite :: TypeInfo u => WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
-makeSprite
-  = makeSprite' testSpriteVbo testSpriteEbo Nothing
+--makeSprite :: TypeInfo u => WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
+--makeSprite
+--  = makeSprite' testSpriteVbo testSpriteEbo Nothing
 
 findSpriteName :: WAD.Wad -> WAD.LumpName -> WAD.LumpName
 findSpriteName wad name
@@ -89,9 +93,9 @@ findSpriteName wad name
         na = chr $ ord a + 1
         nb = chr $ ord b + 1
 
-makeSprite' :: (TypeInfo u) => [GLfloat] -> [GLuint] -> Maybe WAD.Thing -> WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
+makeSprite' :: [FromList (ArgMap SpriteArgs)] -> [GLuint] -> Maybe WAD.Thing -> WAD.Wad -> Program SpriteArgs i -> WAD.LumpName -> IO Sprite
 makeSprite' vbo ebo thing wad program spriteName' = do
-  let spriteName = if (length (BS.unpack spriteName') == 4) then
+  let spriteName = if length (BS.unpack spriteName') == 4 then
                     findSpriteName wad spriteName'
                    else
                     spriteName'
@@ -102,7 +106,7 @@ makeSprite' vbo ebo thing wad program spriteName' = do
   vboId <- withNewPtr (glGenBuffers 1)
   glBindBuffer GL_ARRAY_BUFFER vboId
 
-  bindVertexData program (Bindable vbo)
+  bindVertexData program vbo
 
   eboId <- withNewPtr (glGenBuffers 1)
   glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
@@ -139,10 +143,9 @@ makeSprite' vbo ebo thing wad program spriteName' = do
                      }
 
   -- TODO: what is this?!
-  let v3 = if isNothing thing then
-              (V3 (vbo !! 0) (vbo !! 1) (vbo !! 2))
-           else let jt = fromJust thing in
-              (V3 (fromIntegral $ WAD.thingX jt) 0.0 (fromIntegral $ WAD.thingY jt))
+  let v3 = case thing of
+            Nothing -> V3 0 0 0
+            Just jt -> V3 (fromIntegral $ WAD.thingX jt) 0.0 (fromIntegral $ WAD.thingY jt)
 
   Sprite <$> pure "Lev"
          <*> newIORef False

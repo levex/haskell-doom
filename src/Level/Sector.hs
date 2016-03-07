@@ -109,7 +109,7 @@ insertLine l@WAD.Level{..} resSecs linedef@WAD.LineDef{..} sect@Sector{..}
                 = vertexToVect $ levelVertices !! fromIntegral v
 
 -- Group sectors by texture, and return the vertex data
-textToVertexData :: [Sector] -> M.Map WAD.LumpName [GLfloat]
+textToVertexData :: [Sector] -> M.Map WAD.LumpName [(V3 GLfloat, V2 GLfloat)]
 textToVertexData sectors
     = M.delete "-" textToVert'
     where textToVert'
@@ -118,7 +118,7 @@ textToVertexData sectors
                 $ groupBy (\(t1, _) (t2, _) -> t1 == t2)
                 $ sortOn fst (sectorVertexBufferData sectors)
 
-sectorVertexBufferData :: [Sector] -> [(WAD.LumpName, [GLfloat])]
+sectorVertexBufferData :: [Sector] -> [(WAD.LumpName, [(V3 GLfloat, V2 GLfloat)])]
 sectorVertexBufferData sectors = do
     sector <- sectors
     Wall{..}   <- sectorWalls sector
@@ -134,12 +134,12 @@ sectorVertexBufferData sectors = do
       Nothing ->
           return (middleTex, quad wallStart wallEnd h2 h1)
 
-quad :: V2 GLfloat -> V2 GLfloat -> GLfloat -> GLfloat -> [GLfloat]
+quad :: V2 GLfloat -> V2 GLfloat -> GLfloat -> GLfloat -> [(V3 GLfloat, V2 GLfloat)]
 quad (V2 x y) (V2 x' y') h' h
-    = [ x,  h', y,  0, 0
-      , x', h', y', 1, 0
-      , x,  h,  y,  0, 1
-      , x', h,  y', 1, 1
+    = [ (V3 x  h' y , V2 0 0)
+      , (V3 x' h' y', V2 1 0)
+      , (V3 x  h  y , V2 0 1)
+      , (V3 x' h  y', V2 1 1)
       ]
 
 -- SUBSECTORS ------------------------------------------------------------------

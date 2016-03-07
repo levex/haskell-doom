@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+--{-# LANGUAGE PolyKinds #-}
 
 module Graphics.Binding where
 import Control.Monad
@@ -19,13 +20,22 @@ import Graphics.Program
 import Graphics.Shader
 import Graphics.Shader.Types
 import Linear
+import Graphics.TupleList
 
 data Bindable (k :: [Arg]) a = Bindable [a]
 
-bindVertexData :: forall a i u m.
+type family ArgMap (xs :: [Arg]) :: [*] where
+    ArgMap '[] = '[]
+    ArgMap (x ': xs) = (ArgToLinear x ': ArgMap xs)
+
+bindVertexData :: (x ~ FromList (ArgMap i), ToList x GLfloat, TypeInfo i, MonadIO m) => Program i u -> [x] -> m ()
+bindVertexData p xs = bindVertexData' p b
+    where b = Bindable $ concatMap toList' xs :: Bindable i GLfloat
+
+bindVertexData' :: forall a i u m.
     (Storable a, GLTypeable a, TypeInfo i, MonadIO m) =>
     Program i u -> Bindable i a -> m ()
-bindVertexData (Program progId) (Bindable bdata) = liftIO $ do
+bindVertexData' (Program progId) (Bindable bdata) = liftIO $ do
     withArrayLen bdata $ \len vertices ->
         glBufferData GL_ARRAY_BUFFER
                      (fromIntegral $ len * dataSize)

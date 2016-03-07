@@ -5,11 +5,11 @@ import Foreign
 import Graphics.GL.Core33
 import Graphics.GLUtils
 import Graphics.Shader
-import Game
 import TextureLoader
 import Graphics.Binding
 import Graphics.Program
 import Render
+import Linear
 
 fillSkyTextureData :: WAD.Wad -> IO RenderData
 fillSkyTextureData wad = do
@@ -22,7 +22,7 @@ fillSkyTextureData wad = do
     vboId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ARRAY_BUFFER vboId
 
-    bindVertexData skyProgram (Bindable vbo)
+    bindVertexData skyProgram vbo
 
     eboId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
@@ -44,16 +44,18 @@ fillSkyTextureData wad = do
     withArray txt $
       glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) tW tH 0 GL_RGBA GL_FLOAT
 
-    return $ RenderData { rdVbo = vboId,
-                          rdEbo = eboId,
-                          rdTex = texId,
-                          rdVao = vaoId,
-                          rdProg = skyProgram}
+    return RenderData { rdVbo = vboId
+                      , rdEbo = eboId
+                      , rdTex = texId
+                      , rdVao = vaoId
+                      , rdProg = skyProgram
+                      }
     where
-      vbo = [-1.0,  1.0, 0.0,  0.0, 0.0,
-              1.0,  1.0, 0.0,  1.0, 0.0,
-             -1.0, -1.0, 0.0,  0.0, 1.0,
-              1.0, -1.0, 0.0,  1.0, 1.0] :: [Float]
+      vbo = [ (V3 (-1.0) 1.0    0.0,  V2 0.0 0.0)
+            , (V3 1.0    1.0    0.0,  V2 1.0 0.0)
+            , (V3 (-1.0) (-1.0) 0.0,  V2 0.0 1.0)
+            , (V3 1.0    (-1.0) 0.0,  V2 1.0 1.0)
+            ]
 
       ebo = [0, 1, 2,
              2, 1, 3]

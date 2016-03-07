@@ -16,6 +16,7 @@ module Graphics.Shader
     , staticVert
     , glslTypeSize
     , Pos3
+    , VertexPos
     , model
     , view
     , proj
@@ -79,7 +80,6 @@ spriteVert = do
     out texcoord =: inp tex2
     var glPos =: (uni proj *: uni view *: uni model *: (inp pos3 &: float 1))
     var glPos `at` _0 +=: var vertexPos
-    --var glPos `at` _1 +=: var vertexPos `at` _1
 
 staticVert :: Shader 150 '[Pos3, Tex2] '[Texcoord] '[] ()
 staticVert = do

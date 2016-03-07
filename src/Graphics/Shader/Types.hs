@@ -71,6 +71,15 @@ type family FromLinear a where
     FromLinear (V3 a)  = 'Vec3
     FromLinear (V4 a)  = 'Vec4
 
+type family ArgToLinear a where
+    ArgToLinear ('Arg s 'Mat2)  = (M22 GLfloat)
+    ArgToLinear ('Arg s 'Mat3)  = (M33 GLfloat)
+    ArgToLinear ('Arg s 'Mat4)  = (M44 GLfloat)
+    ArgToLinear ('Arg s 'Float) = (V1 GLfloat)
+    ArgToLinear ('Arg s 'Vec2)  = (V2  GLfloat)
+    ArgToLinear ('Arg s 'Vec3)  = (V3  GLfloat)
+    ArgToLinear ('Arg s 'Vec4)  = (V4  GLfloat)
+
 instance Show GLSLType where
     show Float     = "float"
     show Vec2      = "vec2"

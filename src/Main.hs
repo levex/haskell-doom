@@ -97,7 +97,7 @@ main = do
         vertexArrayId <- withNewPtr (glGenVertexArrays 1)
         glBindVertexArray vertexArrayId
 
-        bindVertexData program (Bindable verts)
+        bindVertexData program verts
 
         return RenderData {
                   rdVbo  = vertexBufferId
@@ -121,11 +121,11 @@ main = do
                 --    -- !asd = error $ show $ map wallPoints (chainWalls sectorWalls)
                 --    ts = triangulation $ nub . concat $ map wallPoints (chainWalls sectorWalls)
                 let ts = triangulate' $ nub . concat $ map wallPoints sectorWalls
-                 in concatMap (\(V2 x y) ->
-                                [x, sectorFloor, y]
+                 in map (\(V2 x y) ->
+                                V3 x sectorFloor y
                     ) ts ++
-                    concatMap (\(V2 x y) ->
-                                [x, sectorCeiling, y]
+                    map (\(V2 x y) ->
+                                V3 x sectorCeiling y
                     ) ts
               ) sectors
         triangulate' points
@@ -158,7 +158,7 @@ main = do
     FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
     Uniform floorProgram proj $= projTrans
 
-    bindVertexData floorProgram (Bindable floorVertexBufferData)
+    bindVertexData floorProgram floorVertexBufferData
 
     glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
@@ -211,14 +211,15 @@ pistolWeapon wad palette = do
     vboId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ARRAY_BUFFER vboId
 
-    let vbo = [-0.2, -0.1, 0.0,  0.0, 0.0,
-                0.2, -0.1, 0.0,  1.0, 0.0,
-               -0.2, -0.7, 0.0,  0.0, 1.0,
-                0.2, -0.7, 0.0,  1.0, 1.0]
+    let vbo = [ (V3 (-0.2) (-0.1) 0.0, V2 0.0 0.0)
+              , (V3  0.2   (-0.1) 0.0, V2 1.0 0.0)
+              , (V3 (-0.2) (-0.7) 0.0, V2 0.0 1.0)
+              , (V3  0.2   (-0.7) 0.0, V2 1.0 1.0)
+              ]
         ebo = [0, 1, 2,
                2, 1, 3]
 
-    bindVertexData wepProgram (Bindable (vbo :: [Float]))
+    bindVertexData wepProgram vbo
 
     eboId <- withNewPtr (glGenBuffers 1)
     glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
