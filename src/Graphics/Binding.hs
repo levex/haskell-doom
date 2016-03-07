@@ -55,10 +55,11 @@ instance (MonadIO m, Num a) => HasGetter m (AttribLocation a) a where
         fromIntegral <$> withCString name (glGetAttribLocation progId)
 
 -- Uniform binding
-data Uniform a = forall u i. Uniform (Program u i) String
+data Uniform u (v :: Arg) a = forall i proxy. Uniform (Program u i) (proxy v)
 
-instance (MonadIO m, HasBinder a) => HasSetter m (Uniform a) a where
-    (Uniform (Program progId) name) $= uniData = liftIO $ do
+instance (MonadIO m, HasBinder a, TypeInfo '[v], Compatible v a) => HasSetter m (Uniform u v a) a where
+    (Uniform (Program progId) _) $= uniData = liftIO $ do
+        let (name, _) = head $ extract (Proxy :: Proxy '[v])
         uniId <- withCString name $ glGetUniformLocation progId
         bindUniform uniData (fromIntegral uniId) 1
 

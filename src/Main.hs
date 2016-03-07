@@ -83,7 +83,7 @@ main = do
     program@(Program progId) <- mkProgram wallVert wallFrag
 
     FragShaderLocation progId "outColor" $= FragDiffuseColor
-    Uniform program "proj" $= projTrans
+    Uniform program proj $= projTrans
 
     levelRData <- forM (M.toList textToVert) $ \(texName, verts) -> do
         vertexBufferId <- withNewPtr (glGenBuffers 1)
@@ -153,7 +153,7 @@ main = do
     floorProgram@(Program floorProgId) <- mkProgram floorVert floorFrag
 
     FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
-    Uniform floorProgram "proj" $= projTrans
+    Uniform floorProgram proj $= projTrans
 
     bindVertexData floorProgram (Bindable floorVertexBufferData)
 
@@ -311,13 +311,13 @@ updateView w initV modelM = do
     prog'@(Program progId) <- asks prog
     glUseProgram progId
 
-    Uniform prog' "model" $= modelM
+    Uniform prog' model $= modelM
 
     let viewTrans = lookAt (V3 0  0  0)
                            initV
                            (V3 0  1  0) :: M44 GLfloat
 
-    Uniform prog' "view"  $= viewTrans
+    Uniform prog' view $= viewTrans
 
     -- render the sky
     glDepthMask (fromBool False)
@@ -343,8 +343,8 @@ updateView w initV modelM = do
     glDrawArrays GL_TRIANGLES 0 50000 -- TODO: need actual number
     glPolygonMode GL_FRONT_AND_BACK GL_FILL
 
-    Uniform rdProg "model" $= modelM
-    Uniform rdProg "view"  $= viewTrans
+    Uniform rdProg model $= modelM
+    Uniform rdProg view  $= viewTrans
 
     -- TODO: can be optimized to only bind program once...
     sprites' <- asks sprites

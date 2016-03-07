@@ -1,16 +1,18 @@
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 module Graphics.Shader.Types where
 import Data.Proxy
 import GHC.TypeLits
 import Graphics.GL
 import Data.Int
 import Data.Word
+import Linear
 
 data Arg = Arg Symbol GLSLType
 
@@ -55,6 +57,20 @@ data GLSLType
     | Mat3
     | Mat4
     | Sampler2D
+
+-- Compatibility with the respective types from the Linear library
+class Compatible a b
+
+instance (FromLinear a ~ typ) => Compatible a ('Arg name typ)
+instance (FromLinear a ~ typ) => Compatible ('Arg name typ) a
+
+type family FromLinear a where
+    FromLinear (M22 a) = 'Mat2
+    FromLinear (M33 a) = 'Mat3
+    FromLinear (M44 a) = 'Mat4
+    FromLinear (V2 a)  = 'Vec2
+    FromLinear (V3 a)  = 'Vec3
+    FromLinear (V4 a)  = 'Vec4
 
 instance Show GLSLType where
     show Float     = "float"
