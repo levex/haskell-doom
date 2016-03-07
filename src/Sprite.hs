@@ -59,14 +59,14 @@ createLevelThings wad prog things
   = forM notReserved (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad prog (thingToSprite $ WAD.thingType t))
     where
       notReserved = filter (\t -> thingTypeToInt (WAD.thingType t) `notElem` reservedSpriteIds) things
-      pW = 3 -- fixME, ugly
+      pW = 2 -- fixME, ugly
       pH = 3 -- fixME, ugly
       tx t = fromIntegral (WAD.thingX t) / scale
       ty t = fromIntegral (WAD.thingY t) / scale
-      mkVbo t = [ - tx t,      pW, ty t,        1, 0
-                , - tx t + pH, pW, ty t + pH,   0, 0
-                , - tx t,      0,  ty t,        1, 1
-                , - tx t + pH, 0,  ty t + pH,   0, 1
+      mkVbo t = [ - tx t,      pH, ty t,      -pW, 1, 0
+                , - tx t     , pH, ty t     ,  pW, 0, 0
+                , - tx t,      0,  ty t,      -pW, 1, 1
+                , - tx t     , 0,  ty t     ,  pW, 0, 1
                 ]
       mkEbo t = [
         0, 1, 2,

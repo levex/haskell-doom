@@ -145,7 +145,7 @@ instance (Show (Sampler n), KnownNat n) => Expression (Sampler n) where
 
 -- ARGUMENT TYPES
 type family FromArg a where
-  FromArg 'Float = Vec 1
+  FromArg 'Float = Scalar
   FromArg 'Vec2 = Vec 2
   FromArg 'Vec3 = Vec 3
   FromArg 'Vec4 = Vec 4

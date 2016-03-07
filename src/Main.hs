@@ -181,8 +181,9 @@ main = do
                                , rdExtra = 0
                                }
 
-    --spriteProg <- mkProgram spriteVert textureFrag
-    sprites <- createLevelThings wad program (WAD.levelThings level)
+    spriteProg <- mkProgram spriteVert textureFrag
+    Uniform spriteProg proj $= projTrans
+    sprites <- createLevelThings wad spriteProg (WAD.levelThings level)
     let palette' = loadPalettes wad
     initState <- GameState <$> return program
                            <*> return sideDefCount
@@ -350,6 +351,9 @@ updateView initV modelM = do
     -- TODO: can be optimized to only bind program once...
     sprites' <- asks sprites
     forM_ sprites' $ \Sprite{..} -> do
+      RenderData{rdProg} <- return spriteRenderData
+      Uniform rdProg model $= modelM
+      Uniform rdProg view  $= viewTrans
       bindRenderData spriteRenderData
       glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 

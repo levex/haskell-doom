@@ -113,6 +113,8 @@ instance (KnownNat a, KnownNat b, KnownNat c) =>
 
 instance (KnownNat a, KnownNat b) => Bilinear (Mat a b) (Vec b) (Vec b)
 
+instance Expression a => Bilinear a Scalar a
+
 class Indexable a where
     type TypeAtIndex a
     indexAt :: a -> Int -> TypeAtIndex a
@@ -143,18 +145,23 @@ _4 a = indexAt a 4
 at :: Functor f => f a -> (a -> b) -> f b
 at = flip (<$>)
 
--- Semigroups
-class Expression a => Semigroup a where
+class Expression a => Group a where
     infixl 8 +::
+    infixl 8 +:
+    infixl 8 -::
+    infixl 8 -:
+    -- add
     (+::) :: a -> a -> a
     a +:: b = fromExpression (Wrap a + Wrap b)
-    infixl 8 +:
     (+:) :: Applicative f => f a -> f a -> f a
     (+:) = liftA2 (+::)
+    -- subtract
+    (-::) :: a -> a -> a
+    a -:: b = fromExpression (Wrap a - Wrap b)
+    (-:) :: Applicative f => f a -> f a -> f a
+    (-:) = liftA2 (-::)
 
-instance KnownNat n => Semigroup (Vec n)
-
-instance (KnownNat r, KnownNat c) => Semigroup (Mat r c)
+instance Expression a => Group a
 
 -- Things that can be turned into vectors
 class (KnownNat (Size a)) => Vectorable a where
@@ -187,6 +194,12 @@ class Assignable a where
     infixl 2 =:
     (=:) :: Shader v i o u a -> Shader v i o u a -> Shader v i o u ()
     (=:) a b = join $ liftA2 (=::) a b
+
+infixl 2 -=:
+a -=: b = a =: a -: b
+
+infixl 2 +=:
+a +=: b = a =: a +: b
 
 instance Expression a => Assignable a where
     v =:: val = imp $ Assignment (Assign (toExpression v) val) ()
