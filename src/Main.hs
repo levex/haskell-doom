@@ -366,11 +366,9 @@ updateView initV modelM = do
     -- render wep
     weapon <- asks pWeapon
     bindRenderData weapon
-    ticks' <- asks ticks
-    lastShot' <- asks lastShot
-    ticks'' <- liftIO $ readIORef ticks'
-    lastShot'' <- liftIO $ readIORef lastShot'
-    when (ticks'' - lastShot'' <= 25) $
+    ticks' <- get ticks
+    lastShot' <- get lastShot
+    when (ticks' - lastShot' <= 25) $
       glBindTexture GL_TEXTURE_2D (rdExtra weapon)
     glDrawElements GL_TRIANGLES 6 GL_UNSIGNED_INT nullPtr
 

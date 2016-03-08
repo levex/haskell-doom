@@ -62,7 +62,7 @@ createLevelThings :: WAD.Wad -> Program SpriteArgs i -> [WAD.Thing] -> IO [Sprit
 createLevelThings wad prog things
   = forM notReserved (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad prog (thingToSprite $ WAD.thingType t))
     where
-      notReserved = filter (\t -> thingTypeToInt (WAD.thingType t) `notElem` reservedSpriteIds) things
+      notReserved = nonReservedSprites things
       pW = 2 -- fixME, ugly
       pH = 3 -- fixME, ugly
       tx t = fromIntegral (WAD.thingX t) / scale

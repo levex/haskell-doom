@@ -1,29 +1,40 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module SpriteMap where
 import Enemy ()
 
 import qualified Game.Waddle          as WAD
 import Data.Maybe
+import qualified  Data.Map.Strict as M
+
+deriving instance Ord WAD.ThingType
 
 thingToSprite :: WAD.ThingType -> WAD.LumpName
 thingToSprite t
   = fromMaybe (error "NO THING")
-        (lookup (thingTypeToInt t) thingIdToSprite)
+        (thingTypeToInt t >>= \t' -> M.lookup t' thingIdToSprite)
 
+reservedSpriteIds :: [Int]
 reservedSpriteIds = [-1, 0, 1, 2, 3, 4, 11, 14]
 
-thingTypeToInt :: Integral a => WAD.ThingType -> a
+thingTypeToInt :: WAD.ThingType -> Maybe Int
 thingTypeToInt t
-  = thingTypeToInt' t [0..3006]
-  where
-    thingTypeToInt' t []
-      = error "lol no"
-    thingTypeToInt' t (x : xs)
-      | t == WAD.thingTypeFromNumber x = x
-      | otherwise                      = thingTypeToInt' t xs
+  = M.lookup t typeToInt
 
-thingIdToSprite = [
-  ((-1),"ffff"),
+nonReservedSprites :: [WAD.Thing] -> [WAD.Thing]
+nonReservedSprites things
+    = [ t
+      | t <- things
+      , fromJust (thingTypeToInt (WAD.thingType t)) `notElem` reservedSpriteIds
+      ]
+
+typeToInt :: M.Map WAD.ThingType Int
+typeToInt
+    = M.fromList $ map (\i -> (WAD.thingTypeFromNumber i, i)) [0..3006]
+
+thingIdToSprite  :: M.Map Int WAD.LumpName
+thingIdToSprite = M.fromList [
+  (-1,"ffff"),
   (0,"0000"),
   (1,"PLAY"),
   (2,"PLAY"),

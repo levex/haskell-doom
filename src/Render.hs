@@ -1,11 +1,12 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RecordWildCards #-}
 module Render where
-import Control.Monad.IO.Class
+
 import Graphics.GL
 import Linear
 import Graphics.Program
 import qualified Game.Waddle as WAD
+import Control.Monad.IO.Class
 
 type Vertex2D = V2 GLfloat
 
@@ -16,12 +17,12 @@ vertexToVect (WAD.Vertex x y)
 scale :: GLfloat
 scale = 16
 
-data RenderData = forall u i. RenderData {
+data RenderData = forall i u. RenderData {
       rdVbo   :: GLuint
     , rdEbo   :: GLuint
     , rdVao   :: GLuint
     , rdTex   :: GLuint
-    , rdProg  :: Program u i
+    , rdProg  :: Program i u
     , rdExtra :: GLuint
 }
 
