@@ -24,11 +24,13 @@ import Graphics.TupleList
 
 data Bindable (k :: [Arg]) a = Bindable [a]
 
+type AsData x = FromList (ArgMap x)
+
 type family ArgMap (xs :: [Arg]) :: [*] where
     ArgMap '[] = '[]
     ArgMap (x ': xs) = (ArgToLinear x ': ArgMap xs)
 
-bindVertexData :: (x ~ FromList (ArgMap i), ToList x GLfloat, TypeInfo i, MonadIO m) => Program i u -> [x] -> m ()
+bindVertexData :: (x ~ AsData i, ToList x GLfloat, TypeInfo i, MonadIO m) => Program i u -> [x] -> m ()
 bindVertexData p xs = bindVertexData' p b
     where b = Bindable $ concatMap toList' xs :: Bindable i GLfloat
 

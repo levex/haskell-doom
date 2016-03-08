@@ -9,32 +9,32 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 module Main where
-import           Control.Monad
-import           Control.Monad.Reader
-import           Data.CaseInsensitive hiding (map)
-import           Data.Foldable
-import           Data.IORef
-import           Data.List hiding (map)
-import           Data.Maybe
-import           Data.Vector.V2
-import           Enemy
-import           Foreign
-import           Game
-import           Level.Sector
-import           Graphics.GL.Core33
-import           Graphics.GLUtils
-import           Graphics.Shader
-import           Graphics.Binding
-import           Graphics.Program
-import           Graphics.UI.GLFW
-import           Linear
-import           Sky
-import           Sprite
-import           TextureLoader
-import           Types
-import           Data.Var
-import           Window
-import           Render
+import Control.Monad
+import Control.Monad.Reader
+import Data.CaseInsensitive hiding (map)
+import Data.Foldable
+import Data.IORef
+import Data.List hiding (map)
+import Data.Maybe
+import Data.Vector.V2
+import Enemy
+import Foreign
+import Game
+import Level.Sector
+import Graphics.GL.Core33
+import Graphics.GLUtils
+import Graphics.Shader
+import Graphics.Binding
+import Graphics.Program
+import Graphics.UI.GLFW
+import Linear
+import Sky
+import Sprite
+import TextureLoader
+import Types
+import Data.Var
+import Window
+import Render
 import Graphics.Triangulation.Delaunay
 import qualified Data.Map as M
 import qualified Game.Waddle          as WAD

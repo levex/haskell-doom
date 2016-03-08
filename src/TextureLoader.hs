@@ -19,9 +19,10 @@ import           Data.Maybe
 import           Data.Word
 import qualified Game.Waddle             as WAD
 import           Graphics.GL.Core33
-import           Game
 import           Linear
 import qualified Data.Array as A
+
+type ColorPalette = [A.Array Int (Word8, Word8, Word8)]
 
 loadPalettes :: WAD.Wad -> ColorPalette
 loadPalettes wad = case WAD.wadPalettes wad of
@@ -30,7 +31,7 @@ loadPalettes wad = case WAD.wadPalettes wad of
 
 textureDataToColor :: ColorPalette -> [Word8] -> [V4 GLfloat]
 textureDataToColor palette words
-  = (\i -> getColor (fromIntegral i) palette) <$> words
+  = (\i -> getColor (fromIntegral i) palette) <$!> words
 
 getColor :: Int -> ColorPalette -> V4 GLfloat
 getColor 0xFF cp

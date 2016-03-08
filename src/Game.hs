@@ -3,19 +3,19 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE Rank2Types #-}
 module Game where
+
 import Control.Monad.IO.Class
 import Control.Monad.Reader
--- ugly
-import           Data.Word
-import           Level.Sector
-import           Graphics.Program
-import           Graphics.GL.Core33
-import           Render
-import           Data.IORef
-import           Enemy
-import           Types
-import           Data.Var
-import           Data.Array
+import Data.IORef
+import Data.Var
+import Enemy
+import Graphics.GL.Core33
+import Graphics.Program
+import Level.Sector
+import Render
+import Sprite
+import TextureLoader
+import Types
 
 newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)
@@ -36,16 +36,6 @@ data GameState u i = GameState {
       , ticks         :: IORef Int
       , lastShot      :: IORef Int
     }
-
-data Sprite = Sprite {
-        spriteName       :: String,     -- sprite name in WAD
-        spriteActive     :: IORef Bool, -- whether we can start moving
-        spriteAnimFrame  :: IORef Int,  -- current animation frame
-        spriteRenderData :: RenderData,
-        spritePos        :: Pos
-    }
-
-type ColorPalette = [Array Int (Word8, Word8, Word8)]
 
 type Game a = forall u i. GameMonad (GameState u i) a
 

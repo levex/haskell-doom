@@ -1,5 +1,11 @@
 {-# LANGUAGE DataKinds #-}
-module Sprite where
+{-# LANGUAGE RecordWildCards #-}
+module Sprite (
+      createLevelThings
+    , loadSpriteColor
+    , Sprite(..)
+    )
+    where
 import           Control.Monad
 import           Data.CaseInsensitive hiding (map)
 import           Data.IORef
@@ -10,32 +16,34 @@ import qualified Data.Map              as M
 import           Data.Maybe
 import           Data.Char
 import           Foreign
-import           Game
 import qualified Game.Waddle           as WAD
 import           Graphics.GLUtils
 import           Graphics.Program
 import           Graphics.Shader
-import           Graphics.TupleList
 import           Graphics.GL.Core33
 import           Linear
 import           TextureLoader
 import           SpriteMap
 import           Graphics.Binding
 import           Render
+import           Types
 
 type SpriteArgs = '[Pos3, VertexPos, Tex2]
 
-testSpriteVbo :: [GLfloat]
-testSpriteVbo = [
-  -0.5,  0.5, 0.0,   0.0, 0.0,
-   0.5,  0.5, 0.0,   1.0, 0.0,
-  -0.5, -0.5, 0.0,   0.0, 1.0,
-   0.5, -0.5, 0.0,   1.0, 1.0]
+data TempSprite = TempSprite {
+          tempSpriteVbo   :: [AsData SpriteArgs]
+        , tempSpriteEbo   :: [GLuint]
+        , tempSpriteTexId :: GLuint
+        , tempSpritePos   :: V3 GLfloat
+    }
 
-testSpriteEbo :: [GLuint]
-testSpriteEbo = [
-  0, 1, 2,
-  2, 1, 3]
+data Sprite = Sprite {
+        spriteName       :: String,     -- sprite name in WAD
+        spriteActive     :: IORef Bool, -- whether we can start moving
+        spriteAnimFrame  :: IORef Int,  -- current animation frame
+        spriteRenderData :: RenderData,
+        spritePos        :: Pos
+    }
 
 loadSpriteColor :: WAD.Sprite -> ColorPalette -> IO [V4 GLfloat]
 loadSpriteColor sprite cp
@@ -59,66 +67,96 @@ loadSprite sprite = do
   getElems pxArr
 
 createLevelThings :: WAD.Wad -> Program SpriteArgs i -> [WAD.Thing] -> IO [Sprite]
-createLevelThings wad prog things
-  = forM notReserved (\t -> makeSprite' (mkVbo t) (mkEbo t) (Just t) wad prog (thingToSprite $ WAD.thingType t))
-    where
-      notReserved = nonReservedSprites things
-      pW = 2 -- fixME, ugly
-      pH = 3 -- fixME, ugly
-      tx t = fromIntegral (WAD.thingX t) / scale
-      ty t = fromIntegral (WAD.thingY t) / scale
-      mkVbo t = [ (V3 (-tx t) pH (ty t), V1 (-pW), V2 1 0)
-                , (V3 (-tx t) pH (ty t), V1    pW, V2 0 0)
-                , (V3 (-tx t) 0  (ty t), V1 (-pW), V2 1 1)
-                , (V3 (-tx t) 0  (ty t), V1    pW, V2 0 1)
-                ]
-      mkEbo t = [
-        0, 1, 2,
-        2, 1, 3]
+createLevelThings wad program things = do
+    let notReserved = nonReservedSprites things
 
---makeSprite :: TypeInfo u => WAD.Wad -> Program u i -> WAD.LumpName -> IO Sprite
---makeSprite
---  = makeSprite' testSpriteVbo testSpriteEbo Nothing
+    (things', _) <- foldM (\(spdata, textures) t -> do
+            let ttype = WAD.thingType t
+
+            (textures', texId) <- case M.lookup ttype textures of
+                Just texId' -> return (textures, texId')
+                Nothing     -> do
+                    texId' <- loadSpriteImage wad ttype
+                    return (M.insert ttype texId' textures, texId')
+            return (createTempSprite t texId : spdata, textures')
+          ) ([], M.empty) notReserved
+    forM things' (makeSprite program)
+
+createTempSprite :: WAD.Thing -> GLuint -> TempSprite
+createTempSprite WAD.Thing{..} texId
+    = TempSprite vbo ebo texId pos
+        where pW = 2 -- FIXME, ugly
+              pH = 3 -- FIXME, ugly
+              tx = fromIntegral thingX / scale
+              ty = fromIntegral thingY / scale
+              vbo = [ (V3 (-tx) pH ty, V1 (-pW), V2 1 0)
+                    , (V3 (-tx) pH ty, V1    pW, V2 0 0)
+                    , (V3 (-tx) 0  ty, V1 (-pW), V2 1 1)
+                    , (V3 (-tx) 0  ty, V1    pW, V2 0 1)
+                    ]
+              ebo = [
+                0, 1, 2,
+                2, 1, 3]
+              pos = V3 tx 0 ty
 
 findSpriteName :: WAD.Wad -> WAD.LumpName -> WAD.LumpName
 findSpriteName wad name
   = findSpriteName' "A" "0"
   where
     findSpriteName' f@(a : as) g@(b : bs)
-      | isNothing p = findSpriteName' (na : as) (nb : bs)
-      | otherwise   = t
+        = case M.lookup (mk t) (WAD.wadSprites wad) of
+            Just _  -> t
+            Nothing -> findSpriteName' (na : as) (nb : bs)
       where
-        p = M.lookup (mk t) (WAD.wadSprites wad)
         t = BS.append (BS.append name (BSC.pack f)) (BSC.pack g)
         na = chr $ ord a + 1
         nb = chr $ ord b + 1
 
-makeSprite' :: [FromList (ArgMap SpriteArgs)] -> [GLuint] -> Maybe WAD.Thing -> WAD.Wad -> Program SpriteArgs i -> WAD.LumpName -> IO Sprite
-makeSprite' vbo ebo thing wad program spriteName' = do
-  let spriteName = if length (BS.unpack spriteName') == 4 then
-                    findSpriteName wad spriteName'
-                   else
-                    spriteName'
-
+makeSprite :: Program SpriteArgs i -> TempSprite -> IO Sprite
+makeSprite program TempSprite{..} = do
   vaoId <- withNewPtr (glGenVertexArrays 1)
   glBindVertexArray vaoId
 
   vboId <- withNewPtr (glGenBuffers 1)
   glBindBuffer GL_ARRAY_BUFFER vboId
 
-  bindVertexData program vbo
+  bindVertexData program tempSpriteVbo
 
   eboId <- withNewPtr (glGenBuffers 1)
   glBindBuffer GL_ELEMENT_ARRAY_BUFFER eboId
-  withArrayLen ebo $ \len vertices ->
+  withArrayLen tempSpriteEbo $ \len vertices ->
       glBufferData GL_ELEMENT_ARRAY_BUFFER
                     (fromIntegral $ len * sizeOf (0 :: GLuint))
                     (vertices :: Ptr GLuint)
                     GL_STATIC_DRAW
 
+  let renderData = RenderData {
+                       rdVao = vaoId
+                     , rdVbo = vboId
+                     , rdTex = tempSpriteTexId
+                     , rdProg = program
+                     , rdEbo = eboId
+                     , rdExtra = 0
+                     }
+
+  Sprite <$> pure "Lev"
+         <*> newIORef False
+         <*> newIORef 0
+         <*> pure renderData
+         <*> pure tempSpritePos
+
+
+loadSpriteImage :: WAD.Wad -> WAD.ThingType -> IO GLuint
+loadSpriteImage wad tt = do
+  let sn' = thingToSprite tt
+      sn = if length (BS.unpack sn') == 4 then
+                    findSpriteName wad sn'
+                   else
+                    sn'
+
   -- load sprite image
-  let sprite = fromMaybe (error ("invalid sprite " ++ BSC.unpack spriteName))
-          (M.lookup (mk spriteName) (WAD.wadSprites wad))
+  let sprite = fromMaybe (error ("invalid sprite " ++ BSC.unpack sn))
+          (M.lookup (mk sn) (WAD.wadSprites wad))
   let loadedPalette = loadPalettes wad
   p <- loadSprite sprite
   let spritePixels = textureDataToColor loadedPalette p
@@ -133,22 +171,4 @@ makeSprite' vbo ebo thing wad program spriteName' = do
   glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_NEAREST)
   withArray spritePixels $
     glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA) sW sH 0 GL_RGBA GL_FLOAT
-
-  let renderData = RenderData {
-                       rdVao = vaoId
-                     , rdVbo = vboId
-                     , rdTex = texId
-                     , rdProg = program
-                     , rdEbo = eboId
-                     }
-
-  -- TODO: what is this?!
-  let v3 = case thing of
-            Nothing -> V3 0 0 0
-            Just jt -> V3 (fromIntegral $ WAD.thingX jt) 0.0 (fromIntegral $ WAD.thingY jt)
-
-  Sprite <$> pure "Lev"
-         <*> newIORef False
-         <*> newIORef 0
-         <*> pure renderData
-         <*> pure v3
+  return texId
