@@ -158,7 +158,10 @@ main = do
     FragShaderLocation floorProgId "outColor" $= FragDiffuseColor
     Uniform floorProgram proj $= projTrans
 
-    bindVertexData floorProgram floorVertexBufferData
+    let fd = concatMap altFloor (extractSubSectors level sectors)
+    --bindVertexData floorProgram floorVertexBufferData
+    bindVertexData floorProgram fd
+    --error $ show $ edata
 
     glEnable GL_DEPTH_TEST
     glEnable GL_BLEND
@@ -339,12 +342,14 @@ updateView initV modelM = do
       glBindVertexArray (rdVao level)
       glDrawElements GL_TRIANGLES (fromIntegral sdefc * 6) GL_UNSIGNED_INT nullPtr
 
+    glDisable GL_CULL_FACE
     floorRd'@RenderData{rdProg} <- asks floorRd
     bindRenderData floorRd'
     --glPolygonMode GL_FRONT_AND_BACK GL_LINE
     glLineWidth 1
     glDrawArrays GL_TRIANGLES 0 50000 -- TODO: need actual number
     glPolygonMode GL_FRONT_AND_BACK GL_FILL
+    glEnable GL_CULL_FACE
 
     Uniform rdProg model $= modelM
     Uniform rdProg view  $= viewTrans

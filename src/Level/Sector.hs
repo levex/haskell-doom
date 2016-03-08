@@ -7,6 +7,8 @@ module Level.Sector (
     , Wall(..)
     , Subsector
     , textToVertexData
+    , ssfloor
+    , altFloor
     ) where
 
 import Data.List
@@ -39,7 +41,8 @@ instance Show Wall where
 
 -- For floor and ceiling rendering
 data Subsector = Subsector {
-    subsectorFloorPoints :: [Vertex2D]
+      subsectorSector :: Sector
+    , subsectorFloorPoints :: [Vertex2D]
 } deriving Show
 
 
@@ -144,13 +147,45 @@ quad (V2 x y) (V2 x' y') h' h
 
 -- SUBSECTORS ------------------------------------------------------------------
 -- these are evil
-extractSubSectors :: WAD.Level -> [Subsector]
-extractSubSectors WAD.Level{..}
-    = map (Subsector . subsectorPoints) levelSSectors
-        where subsectorPoints :: WAD.SSector -> [Vertex2D]
+extractSubSectors :: WAD.Level -> [Sector] -> [Subsector]
+extractSubSectors WAD.Level{..} sectors
+    = map (uncurry Subsector . subsectorPoints) levelSSectors
+        where subsectorPoints :: WAD.SSector -> (Sector, [Vertex2D])
               subsectorPoints WAD.SSector{..}
-                = map (\WAD.Seg{..} ->
-                    vertexToVect $ levelVertices !! fromIntegral segStartVertex)
-                    $ take (fromIntegral ssectorSegCount)
-                        . drop (fromIntegral ssectorSegStart)
-                    $ levelSegs
+                = (sect, concatMap (\WAD.Seg{..} ->
+                    vertexToVect (levelVertices !! fromIntegral segStartVertex) :
+                    [vertexToVect $ levelVertices !! fromIntegral segEndVertex]
+                    ) segs)
+                        where segs = take (fromIntegral ssectorSegCount) .
+                                     drop (fromIntegral ssectorSegStart) $
+                                         levelSegs
+                              sect = sectors !!! WAD.sideDefSector
+                                      (levelSideDefs !!! WAD.lineDefRightSideDef
+                                      (levelLineDefs !!! WAD.segLineDef (head segs)))
+
+(!!!) :: Integral b => [a] -> b -> a
+a !!! b = a !! fromIntegral b
+
+ssectorFloorTriangles :: Subsector -> ([V2 GLfloat], (GLuint, [[Int]]))
+ssectorFloorTriangles ssect
+    = (ps, (fromIntegral l, ebo))
+        where ebo = [[0, x, x + 1] | x <- [1..l - 1]]
+              ps  = subsectorFloorPoints ssect
+              l   = length ps
+
+ssfloor :: [Subsector] -> ([V2 GLfloat], [[GLuint]])
+ssfloor ss = (concatMap fst ss', concat $ snd r)
+    where ss' = map ssectorFloorTriangles ss
+          r   = foldr ((\(l, es) (s, es') -> (s + l, map (map (\x -> fromIntegral x+s)) es : es')) . snd) (0, []) ss'
+
+altFloor :: Subsector -> [V3 GLfloat]
+altFloor ssect
+    = floor ++ ceil
+        where ebo = [[ps !! 0, ps !! x, ps !! (x + 1)] | x <- [1..l - 2]]
+              floor = map (\(V2 x y) -> V3 x f y) $ concat ebo
+              ceil  = map (\(V2 x y) -> V3 x c y) $ concat ebo
+              ps  = subsectorFloorPoints ssect
+              l   = length ps
+              f   = sectorFloor (subsectorSector ssect)
+              c   = sectorCeiling (subsectorSector ssect)
+
