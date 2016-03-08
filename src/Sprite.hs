@@ -37,9 +37,9 @@ testSpriteEbo = [
   0, 1, 2,
   2, 1, 3]
 
-loadSpriteColor :: WAD.Sprite -> ColorPalette -> IO [GLfloat]
+loadSpriteColor :: WAD.Sprite -> ColorPalette -> IO [V4 GLfloat]
 loadSpriteColor sprite cp
-  = unpackTuples <$> (textureDataToColor cp <$> loadSprite sprite)
+  = textureDataToColor cp <$> loadSprite sprite
 
 loadSprite :: WAD.Sprite -> IO [Word8]
 loadSprite sprite = do
@@ -121,7 +121,7 @@ makeSprite' vbo ebo thing wad program spriteName' = do
           (M.lookup (mk spriteName) (WAD.wadSprites wad))
   let loadedPalette = loadPalettes wad
   p <- loadSprite sprite
-  let spritePixels = unpackTuples (textureDataToColor loadedPalette p)
+  let spritePixels = textureDataToColor loadedPalette p
   let sW = fromIntegral $ WAD.pictureWidth $ WAD.spritePicture sprite
   let sH = fromIntegral $ WAD.pictureHeight $ WAD.spritePicture sprite
   texId <- withNewPtr (glGenTextures 1)

@@ -4,7 +4,6 @@ module TextureLoader
     ( loadTexture
     , loadPalettes
     , ColorPalette
-    , unpackTuples
     , textureDataToColor
     , getColor
     )
@@ -20,8 +19,8 @@ import           Data.Maybe
 import           Data.Word
 import qualified Game.Waddle             as WAD
 import           Graphics.GL.Core33
-import           Graphics.GL.Functions
 import           Game
+import           Linear
 
 loadPalettes :: WAD.Wad -> ColorPalette
 loadPalettes wad
@@ -30,21 +29,18 @@ loadPalettes wad
   where
     pals@(~(Just (WAD.Palettes p))) = WAD.wadPalettes wad
 
-textureDataToColor :: ColorPalette -> [Word8] -> [(GLfloat, GLfloat, GLfloat, GLfloat)]
+textureDataToColor :: ColorPalette -> [Word8] -> [V4 GLfloat]
 textureDataToColor palette words
   = (\i -> getColor (fromIntegral i) palette) <$> words
 
-getColor :: Int -> ColorPalette -> (GLfloat, GLfloat, GLfloat, GLfloat)
+getColor :: Int -> ColorPalette -> V4 GLfloat
 getColor 0xFF cp
-  = (0.0, 0.0, 0.0, 0.0)
+  = V4 0 0 0 0
 getColor n cp
-  = (\(r, g, b) -> (fromIntegral r / 255, fromIntegral g / 255, fromIntegral b / 255, 1.0))
+  = (\(r, g, b) -> V4 (fromIntegral r / 255) (fromIntegral g / 255) (fromIntegral b / 255) 1.0)
           . (!! n) . head $ cp
 
-unpackTuples :: [(a, a, a, a)] -> [a]
-unpackTuples = concatMap (\(r, g, b, a) -> [r, g, b, a])
-
-loadTexture :: WAD.Wad -> WAD.LumpName -> IO (GLsizei, GLsizei, [GLfloat])
+loadTexture :: WAD.Wad -> WAD.LumpName -> IO (GLsizei, GLsizei, [V4 GLfloat])
 loadTexture wad' name = do
   let myTex = fromJust (Map.lookup (mk name) (WAD.wadTextures wad'))
   let texWidth = fromIntegral $ WAD.textureWidth myTex
@@ -69,4 +65,4 @@ loadTexture wad' name = do
   final <- liftIO $ getElems pxArr
   return (fromIntegral texWidth,
           fromIntegral texHeight,
-          unpackTuples (textureDataToColor loadedPalette final))
+          (textureDataToColor loadedPalette final))
