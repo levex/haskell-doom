@@ -13,21 +13,20 @@ import           Control.Monad
 import           Control.Monad.Reader
 import           Data.Array.IO           as AI
 import qualified Data.ByteString         as BS
-import           Data.CaseInsensitive
-import           Data.Map.Lazy           as Map
+import           Data.CaseInsensitive    hiding (map)
+import qualified Data.Map.Lazy           as Map
 import           Data.Maybe
 import           Data.Word
 import qualified Game.Waddle             as WAD
 import           Graphics.GL.Core33
 import           Game
 import           Linear
+import qualified Data.Array as A
 
 loadPalettes :: WAD.Wad -> ColorPalette
-loadPalettes wad
-  | isNothing pals = []
-  | otherwise      = p
-  where
-    pals@(~(Just (WAD.Palettes p))) = WAD.wadPalettes wad
+loadPalettes wad = case WAD.wadPalettes wad of
+    Nothing -> []
+    Just (WAD.Palettes p) -> map (\w -> A.listArray (0, length w) w) p
 
 textureDataToColor :: ColorPalette -> [Word8] -> [V4 GLfloat]
 textureDataToColor palette words
@@ -38,7 +37,7 @@ getColor 0xFF cp
   = V4 0 0 0 0
 getColor n cp
   = (\(r, g, b) -> V4 (fromIntegral r / 255) (fromIntegral g / 255) (fromIntegral b / 255) 1.0)
-          . (!! n) . head $ cp
+          . (A.! n) . head $ cp
 
 loadTexture :: WAD.Wad -> WAD.LumpName -> IO (GLsizei, GLsizei, [V4 GLfloat])
 loadTexture wad' name = do

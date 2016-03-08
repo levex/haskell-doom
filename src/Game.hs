@@ -15,6 +15,7 @@ import           Data.IORef
 import           Enemy
 import           Types
 import           Data.Var
+import           Data.Array
 
 newtype GameMonad e a = GameMonad { unGame :: ReaderT e IO a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader e)
@@ -44,7 +45,7 @@ data Sprite = Sprite {
         spritePos        :: Pos
     }
 
-type ColorPalette = [[(Word8, Word8, Word8)]]
+type ColorPalette = [Array Int (Word8, Word8, Word8)]
 
 type Game a = forall u i. GameMonad (GameState u i) a
 
